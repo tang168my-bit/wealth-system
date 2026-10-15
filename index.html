@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="zh-HK">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>財富管理系統</title>
+<meta name="theme-color" content="#1d6b66">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="財富系統">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+</head>
+<body>
+<style>
+/* Layout: one column ledger. Sticky scrollable section bar on top; each section = inputs, then results, then formula cards. Fixed light theme. */
+:root{
+  --bg:#f4f7f6; --surface:#ffffff; --ink:#15262d; --muted:#5d6e75; --line:#d8e2e0;
+  --accent:#1d6b66; --accent-soft:#e2efed; --gold:#9a6f18; --gold-soft:#f6eedb;
+  --ok:#2c8650; --ok-soft:#e1f1e6; --warn:#a97a0c; --warn-soft:#f7eed3; --bad:#bb4136; --bad-soft:#f8e2df;
+  --display:"Noto Serif TC","Songti TC","PMingLiU",serif;
+  --body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--body);font-size:16px;line-height:1.6}
+.wrap{max-width:980px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 56px;display:flex;flex-direction:column;gap:16px}
+h1,h2,h3{font-family:var(--display);margin:0;line-height:1.3;text-wrap:balance}
+h1{font-size:1.6rem} h2{font-size:1.3rem} h3{font-size:1.05rem}
+p{margin:0}
+.muted{color:var(--muted);font-size:.9rem}
+.top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:10px}
+.top-r{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pill{font-size:.78rem;padding:4px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:500}
+.pill.local{background:var(--warn-soft);color:var(--warn)} .pill.err{background:var(--bad-soft);color:var(--bad)}
+.nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);display:flex;gap:6px;overflow-x:auto;padding-block:8px;scrollbar-width:thin}
+.nav button{flex:0 0 auto;font:inherit;font-size:.9rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:7px 14px;min-height:40px;cursor:pointer}
+.nav button[aria-current=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+.nav .sep{flex:0 0 1px;background:var(--line);margin:4px 2px}
+main{display:flex;flex-direction:column;gap:16px}
+.sheet{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.lead{display:flex;flex-direction:column;gap:4px}
+select,input{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 9px;min-height:40px;width:100%}
+input[type=number]{font-variant-numeric:tabular-nums}
+input:focus-visible,select:focus-visible,button:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+textarea{font:inherit;font-size:.85rem;width:100%;min-height:90px;border:1px solid var(--line);border-radius:8px;padding:8px;color:var(--ink);background:var(--surface)}
+.btn{font:inherit;font-weight:500;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:10px;padding:8px 16px;min-height:44px;cursor:pointer;align-self:flex-start}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn.small{min-height:38px;padding:5px 12px;font-size:.88rem}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:10px 14px}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:.85rem;color:var(--muted);min-width:0}
+.assume{border-top:1px dashed var(--line);padding-top:10px;display:flex;flex-direction:column;gap:8px}
+.lbl{font-size:.74rem;letter-spacing:.08em;color:var(--gold);font-weight:700}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:10px}
+.kv{background:var(--bg);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0;border-left:4px solid transparent}
+.kv span{font-size:.8rem;color:var(--muted)}
+.kv b{font-size:1.12rem;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.kv small{font-size:.75rem;color:var(--muted)}
+.kv.ok{border-left-color:var(--ok)} .kv.warn{border-left-color:var(--warn)} .kv.bad{border-left-color:var(--bad)}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table.tbl{border-collapse:collapse;width:100%;font-size:.88rem}
+.tbl th{background:var(--bg);text-align:left;font-weight:500;color:var(--muted);padding:6px 8px;white-space:nowrap;font-size:.8rem}
+.tbl td{padding:4px 6px;border-top:1px solid var(--line);vertical-align:middle}
+.tbl td input,.tbl td select{min-height:36px;padding:5px 7px;min-width:96px}
+.tbl td.cv{white-space:nowrap;font-variant-numeric:tabular-nums;background:var(--accent-soft);color:var(--ink);font-size:.85rem}
+.tbl th.cvh{background:var(--accent-soft);color:var(--accent)}
+.tbl .del{font:inherit;border:0;background:transparent;color:var(--muted);font-size:1.2rem;cursor:pointer;min-width:36px;min-height:36px;border-radius:8px}
+.tbl .del:hover{background:var(--bad-soft);color:var(--bad)}
+.tbl.read td{padding:7px 10px;font-variant-numeric:tabular-nums}
+.empty{padding:14px;text-align:center;color:var(--muted);font-size:.9rem}
+.tag{font-size:.74rem;font-weight:700;padding:2px 8px;border-radius:999px;display:inline-block}
+.tag.bad{background:var(--bad-soft);color:var(--bad)} .tag.ok{background:var(--ok-soft);color:var(--ok)} .tag.warn{background:var(--warn-soft);color:var(--warn)}
+.hint{font-size:.86rem;color:var(--muted);background:var(--bg);border-radius:10px;padding:10px 12px}
+.fxs{display:flex;flex-direction:column;gap:6px}
+details.fx{border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+details.fx summary{cursor:pointer;padding:8px 12px;font-size:.88rem;color:var(--accent);font-weight:500}
+details.fx[open] summary{border-bottom:1px solid var(--line)}
+.fcard{padding:12px;display:flex;flex-direction:column;gap:6px}
+.fname{font-weight:700}
+.fexpr{font-family:var(--mono);font-size:.86rem;background:var(--gold-soft);border-radius:8px;padding:8px 10px;overflow-x:auto;white-space:pre-wrap}
+.fexcel{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-size:.85rem}
+.fexcel span{font-size:.72rem;font-weight:700;color:var(--ok);letter-spacing:.06em}
+.fexcel code{font-family:var(--mono);overflow-wrap:anywhere}
+.fsrc{font-size:.76rem;color:var(--muted)}
+.lib{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:10px}
+.lib .fcard{border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.chart svg{width:100%;height:auto;display:block}
+.legend{display:flex;gap:14px;font-size:.8rem;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.sub{display:flex;gap:6px;flex-wrap:wrap}
+.sub button{font:inherit;font-size:.88rem;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:6px 12px;min-height:40px;cursor:pointer;color:var(--ink)}
+.sub button[aria-current=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:700}
+/* client check */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:10px}
+.card{border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.ctag{font-size:.74rem;letter-spacing:.06em;color:var(--accent);font-weight:700}
+.ctag.wall{color:var(--gold)}
+.choices{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.choices button,.yn button,.seg button{font:inherit;font-size:.9rem;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:9px;min-height:44px;cursor:pointer;padding:4px}
+.choices button[data-v=ok][aria-pressed=true],.yn button[data-v=y][aria-pressed=true]{background:var(--ok);border-color:var(--ok);color:#fff}
+.choices button[data-v=unsure][aria-pressed=true]{background:var(--warn);border-color:var(--warn);color:#fff}
+.choices button[data-v=no][aria-pressed=true],.yn button[data-v=n][aria-pressed=true]{background:var(--bad);border-color:var(--bad);color:#fff}
+.seg{display:flex;gap:6px}.seg button{min-width:64px}
+.seg button[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:700}
+.grid6{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+@media (max-width:480px){.grid6{grid-template-columns:repeat(2,1fr)}}
+.tile{font:inherit;border:2px solid transparent;border-radius:12px;padding:10px 6px;min-height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;background:var(--bg);color:var(--ink)}
+.tile b{font-family:var(--display);font-size:1.08rem}
+.tile span{font-size:.8rem}
+.tile.ok{background:var(--ok-soft)} .tile.ok span{color:var(--ok)}
+.tile.unsure{background:var(--warn-soft)} .tile.unsure span{color:var(--warn)}
+.tile.no{background:var(--bad-soft)} .tile.no span{color:var(--bad)}
+.tile[aria-pressed=true]{border-color:var(--ink)}
+.tile .pick{font-size:.72rem;color:var(--ink);font-weight:700}
+.light{font-size:.78rem;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--bg);color:var(--muted)}
+.light.ok{background:var(--ok-soft);color:var(--ok)} .light.unsure{background:var(--warn-soft);color:var(--warn)} .light.no{background:var(--bad-soft);color:var(--bad)}
+.mhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.checkrow{display:flex;justify-content:space-between;align-items:center;gap:10px;border-bottom:1px solid var(--line);padding-bottom:8px}
+.checkrow:last-child{border-bottom:0}
+.yn{display:flex;gap:6px;flex-shrink:0}.yn button{min-width:52px;min-height:40px}
+.chip{font:inherit;font-size:.88rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:6px 14px;min-height:40px;cursor:pointer}
+.chip[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:700}
+.svgbox svg{width:100%;max-width:560px;height:auto;display:block;margin:0 auto}
+@media (prefers-reduced-motion:no-preference){.nav button,.tile,.choices button{transition:background .15s,border-color .15s}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>財富管理系統</h1>
+      <p class="muted">記錄真實數字，在用的過程中學會每一條公式</p>
+    </div>
+    <div class="top-r">
+      <span class="pill local" id="sync" aria-live="polite">離線版：資料存在這部設備，記得定期複製備份</span>
+      <label class="muted" for="cur" style="display:flex;gap:6px;align-items:center">幣種
+        <select id="cur" style="width:auto;min-height:36px">
+          <option value="HK$">港幣 HK$</option><option value="¥">人民幣 ¥</option><option value="US$">美元 US$</option>
+        </select>
+      </label>
+    </div>
+  </header>
+  <nav class="nav" id="nav" aria-label="系統分區"></nav>
+  <main id="main"></main>
+</div>
+
+<script>
+(function(){
+"use strict";
+/* ================= 基本工具 ================= */
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const clone=o=>JSON.parse(JSON.stringify(o));
+const N=v=>{const x=parseFloat(v);return isFinite(x)?x:NaN};
+const ok=x=>typeof x==='number'&&isFinite(x);
+const thisMonth=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')};
+const today=()=>{const d=new Date();return thisMonth()+'-'+String(d.getDate()).padStart(2,'0')};
+function cur(){return (S.settings&&S.settings.cur)||'HK$'}
+function money(n){if(!ok(n))return '–';const s=(Math.round(n)+0).toLocaleString('zh-Hant');return cur()+' '+s}
+function pct(n,d){if(!ok(n))return '–';return (n*100).toFixed(d==null?1:d)+'%'}
+function num(n,d){if(!ok(n))return '–';return n.toFixed(d==null?1:d)}
+function months(m){if(m==null)return '–';if(m===Infinity)return '永遠到不了';if(!ok(m))return '–';if(m<=0)return '已達到';const y=Math.floor(m/12),r=Math.round(m%12);return (y?y+' 年 ':'')+(r?r+' 個月':(y?'':'0 個月'))}
+function cls(x,good,mid){if(!ok(x))return '';return x>=good?'ok':(x>=mid?'warn':'bad')}
+function kv(label,val,c,note){return `<div class="kv ${c||''}"><span>${label}</span><b>${val}</b>${note?`<small>${note}</small>`:''}</div>`}
+
+/* ================= 資料與儲存 ================= */
+const DEF={
+  settings:{cur:'HK$'},
+  income:[],expense:[],assets:[],debts:[],invest:[],trades:[],biz:[],compare:[],ins:[],
+  budget:{},goal:{type:'asset',rates:'2,4,6,8,10'},levsim:{},cmpYears:'',firms:[],disc:{},
+  check:{answers:{},selected:[],vals:{},medHas:'',leg:[null,null,null,null,null,null]},
+  checkRecords:[]
+};
+const KEYS=Object.keys(DEF);
+const S={};
+const LS='wealthsys_v1';
+function get(k){if(S[k]===undefined)S[k]=clone(DEF[k]);return S[k]}
+try{const o=JSON.parse(localStorage.getItem(LS)||'{}');Object.keys(o).forEach(k=>{if(KEYS.includes(k))S[k]=o[k]})}catch(e){}
+KEYS.forEach(get);
+function saveLocal(){try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}}
+let cloud=null;const timers={},dirty={},writing={};
+function setSync(m){const el=$('sync');if(m==='cloud'){el.className='pill';el.textContent='已存到你的帳戶，換設備也看得到'}else if(m==='err'){el.className='pill err';el.textContent='雲端暫時存不到，資料先留在這台設備'}else{el.className='pill local';el.textContent='離線版：資料存在這部設備，記得定期複製備份'}}
+function persist(k){saveLocal();if(!cloud)return;dirty[k]=(dirty[k]||0)+1;clearTimeout(timers[k]);timers[k]=setTimeout(()=>writeCloud(k),700)}
+async function writeCloud(k){
+  if(writing[k]){timers[k]=setTimeout(()=>writeCloud(k),400);return}
+  writing[k]=true;const v=dirty[k];
+  try{await cloud.doc(k).set({v:S[k]});setSync('cloud')}catch(e){setSync('err')}
+  writing[k]=false;if(dirty[k]===v)dirty[k]=0;
+}
+async function initCloud(){
+  try{
+    if(!window.claude||typeof window.claude.use!=='function')return;
+    const user=await window.claude.use('user');const db=await window.claude.use('db');
+    if(!user||!db)return;const id=await user.id();if(!id)return;
+    cloud=db.collection('data/users/'+id);
+    const snap=await cloud.get();
+    if(snap.empty){for(const k of KEYS){if(JSON.stringify(S[k])!==JSON.stringify(DEF[k])){dirty[k]=1;await writeCloud(k)}}}
+    else{snap.docs.forEach(d=>{const b=d.data();if(b&&'v' in b&&KEYS.includes(d.id))S[d.id]=b.v});saveLocal();render()}
+    setSync('cloud');
+    cloud.onSnapshot(qs=>{
+      let changed=false;
+      qs.docChanges().forEach(ch=>{
+        if(ch.type==='removed')return;const k=ch.doc.id;if(!KEYS.includes(k)||dirty[k])return;
+        if(ch.doc.metadata.hasPendingWrites)return;const b=ch.doc.data();if(!b||!('v' in b))return;
+        if(JSON.stringify(S[k])!==JSON.stringify(b.v)){S[k]=b.v;changed=true}
+      });
+      if(changed){saveLocal();const a=document.activeElement;if(!a||!$('main').contains(a)||a.tagName==='BUTTON')render()}
+    },()=>setSync('err'));
+  }catch(e){}
+}
+
+/* ================= 公式庫 ================= */
+const SRC={A:'Notion〈理財需要懂公式〉',B:'Notion〈需求缺口公式總表〉',C:'Notion〈8 大知識模組〉',D:'Notion〈40 歲前投資 100 萬〉',E:'Notion〈絕對投資思維〉',F:'3 月對話〈Building financial models〉',G:'7 月對話〈財務規劃師必學 Excel 公式〉',H:'本次討論新增'};
+const F={
+ networth:{c:'財務地基',n:'淨資產',f:'淨資產 = 總資產 − 總負債',p:'你真正擁有多少。資產包括現金、投資現值和其他資產。',x:'=SUM(資產)-SUM(負債)',s:'C'},
+ surplus:{c:'財務地基',n:'每月結餘',f:'每月結餘 = 月收入 − 月支出',p:'每個月真正能留下來、拿去累積財富的錢。',x:'=收入-支出',s:'C H'},
+ saverate:{c:'財務地基',n:'儲蓄率',f:'儲蓄率 = 每月結餘 ÷ 月收入',p:'賺回來的錢有幾成留得住。這個比例決定財富增長的速度。',x:'=結餘/收入',s:'H'},
+ emergency:{c:'財務地基',n:'應急金月數',f:'應急金月數 = 現金類資產 ÷ 平均月支出',p:'突然沒有收入時，現金能撐幾個月。你定的目標是 12 個月。',x:'=現金/AVERAGE(月支出)',s:'H'},
+ weight:{c:'財務地基',n:'資產權重與集中度',f:'權重 = 某類資產 ÷ 總資產',p:'看錢是否太集中在同一類資產，集中度越高，單一風險越大。',x:'=B2/SUM($B$2:$B$20)',s:'C'},
+ liquidity:{c:'財務地基',n:'快速可用比例',f:'快速可用比例 = (隨時可用 + 30 天內可變現) ÷ 總資產',p:'資產看起來多，不代表急用時拿得出來。',x:'=SUMIF(變現速度,"A",金額)+SUMIF(變現速度,"B",金額)',s:'C'},
+ passcover:{c:'財務地基',n:'被動收入覆蓋率',f:'被動收入覆蓋率 = 每月被動收入 ÷ 每月支出',p:'大於 1，代表不工作也夠生活，即財務自由。',x:'=被動收入/支出',s:'H'},
+ debtcover:{c:'債務',n:'債務覆蓋率',f:'債務覆蓋率 = 每月被動收入 ÷ 每月債務還款',p:'大於 1，代表不靠工作收入也能還債。',x:'=被動收入/月供總額',s:'H'},
+ payoff:{c:'債務',n:'還清需要多久',f:'月數 = −ln(1 − 餘額 × 月利率 ÷ 月供) ÷ ln(1 + 月利率)',p:'月供如果連利息都不夠付，就永遠還不完。',x:'=NPER(年利率/12,-月供,餘額)',s:'A H'},
+ interest:{c:'債務',n:'總利息',f:'總利息 = 每期利息加總（約等於 月供 × 月數 − 餘額）',p:'借這筆錢真正付出的代價。',x:'=-CUMIPMT(年利率/12,月數,餘額,1,月數,0)',s:'H'},
+ ipmt:{c:'債務',n:'每期利息與本金',f:'第 k 期利息 = 當時餘額 × 月利率；本金 = 月供 − 利息',p:'越早期，月供裡利息佔得越多。',x:'=IPMT(利率,k,期數,餘額)　=PPMT(利率,k,期數,餘額)',s:'A'},
+ realrate:{c:'通脹與時間價值',n:'實質報酬率',f:'實質報酬率 = (1 + 名義報酬率) ÷ (1 + 通脹率) − 1',p:'扣除通脹後，購買力真正增加多少。',x:'=(1+r)/(1+g)-1',s:'A B C'},
+ fv:{c:'通脹與時間價值',n:'終值 FV',f:'FV = 現值 × (1 + r)^n + 每期投入 × [(1 + r)^n − 1] ÷ r',p:'現在的錢加上每期投入，n 期後會變成多少。',x:'=FV(r,n,-每期投入,-現值)',s:'A C G'},
+ pv:{c:'通脹與時間價值',n:'現值 PV',f:'PV = 未來值 ÷ (1 + r)^n',p:'要在未來得到某個數字，今天要放多少。',x:'=PV(r,n,0,-未來值)',s:'A G'},
+ pmt:{c:'通脹與時間價值',n:'每期要存多少 PMT',f:'PMT = (目標 − 現值 × (1 + r)^n) × r ÷ [(1 + r)^n − 1]',p:'已知目標、時間和回報，反推每期要投入多少。',x:'=PMT(r,n,-現值,目標)',s:'A C D G'},
+ nper:{c:'通脹與時間價值',n:'要多久 NPER',f:'n = ln[(目標 × r + PMT) ÷ (現值 × r + PMT)] ÷ ln(1 + r)',p:'照現在的速度，要多少期才到達目標。',x:'=NPER(r,-每期投入,-現值,目標)',s:'G'},
+ rate:{c:'通脹與時間價值',n:'需要多少回報 RATE',f:'找出 r，使 FV(r, n, PMT, 現值) = 目標',p:'時間和投入不變時，需要多高的回報率。沒有直接公式，要用試算求出。',x:'=RATE(n,-每期投入,-現值,目標)',s:'G'},
+ futexp:{c:'通脹與時間價值',n:'未來第一年生活費',f:'未來第一年生活費 = 今天年支出 × (1 + 通脹率)^年數',p:'把今天的生活費，換算成退休那年的價格。',x:'=年支出*(1+g)^d',s:'B C'},
+ annpv:{c:'生活、養老與教育',n:'普通年金現值',f:'PV = 每年領取 × [1 − (1 + r)^(−n)] ÷ r',p:'每年領固定金額、領 n 年，一開始要有多少本金。',x:'=PV(r,n,-每年領取)',s:'B C'},
+ gapv:{c:'生活、養老與教育',n:'成長年金現值（含通脹）',f:'PV = 第一年領取 × [1 − ((1 + g) ÷ (1 + r))^n] ÷ (r − g)',p:'每年領取額跟著通脹上升時，一開始要有多少本金。',x:'=PMT1*(1-((1+g)/(1+r))^n)/(r-g)　（Excel 沒有直接函數）',s:'A C'},
+ defer:{c:'生活、養老與教育',n:'延後領取折回今天',f:'今天所需 = 退休當下所需 ÷ (1 + r)^距離退休年數',p:'退休時要的一大筆錢，換算成今天要準備多少。',x:'=退休時所需/(1+r)^d',s:'C'},
+ fire:{c:'生活、養老與教育',n:'財務自由數字',f:'自由數字 = 每年支出 ÷ 每年可提取比例',p:'投資資產達到這個數字，每年按比例提取就夠生活。提取比例由你自己定；晨星 2026 年以美國市場為基準的研究用 3.9%，不能直接套用到香港。',x:'=年支出/提取率',s:'H'},
+ livgap:{c:'生活、養老與教育',n:'生活基金缺口',f:'缺口 = max(所需生活基金 − 已有資金未來值 − 每年投入終值, 0)',p:'扣掉已準備和打算繼續投入的部分，還差多少。',x:'=MAX(所需-FV(r,n,0,-已有)-FV(r,n,-每年投入),0)',s:'B'},
+ edu:{c:'生活、養老與教育',n:'教育金需求',f:'總需求 = Σ 今年費用 × (1 + 學費通脹)^(距入學年數 + 第 k 年)',p:'把每一年的學費都換算成入學時的價格再加起來。',x:'=SUMPRODUCT(費用*(1+g)^(d+{0,1,2,3}))',s:'H'},
+ xirr:{c:'投資績效',n:'真實年化回報 XIRR',f:'找出 r，使 Σ 現金流 ÷ (1 + r)^(天數 ÷ 365) = 0',p:'不同日期有進有出時，最準確的年化回報。投入記負數、取回和現值記正數。',x:'=XIRR(金額,日期)',s:'A C G'},
+ mdd:{c:'投資績效',n:'最大回撤',f:'最大回撤 = (谷底 − 之前最高點) ÷ 之前最高點',p:'曾經從最高點跌了多少。這是你要承受的最壞感受。',x:'=MIN(現值/MAX(之前現值)-1)',s:'E'},
+ cagr:{c:'投資績效',n:'年化回報 CAGR',f:'CAGR = (期末 ÷ 期初)^(1 ÷ 年數) − 1',p:'中間沒有進出時的平均年增長率。',x:'=(期末/期初)^(1/年數)-1',s:'E'},
+ vol:{c:'投資績效',n:'年化波動',f:'年化波動 = 月報酬標準差 × √12',p:'回報上下跳動的幅度，越大越不穩定。',x:'=STDEV(月報酬)*SQRT(12)',s:'E'},
+ sharpe:{c:'投資績效',n:'夏普比率',f:'夏普比率 = (年化回報 − 無風險利率) ÷ 年化波動',p:'每承受一份波動，換來多少額外回報。',x:'=(CAGR-無風險利率)/年化波動',s:'E'},
+ sortino:{c:'投資績效',n:'索提諾比率',f:'索提諾比率 = (年化回報 − 無風險利率) ÷ 只計下跌的波動',p:'跟夏普一樣，但只把下跌當作風險。',x:'=(CAGR-無風險利率)/下行波動',s:'E'},
+ beta:{c:'投資績效',n:'Beta 與 Alpha',f:'組合月報酬 = Alpha + Beta × 大盤月報酬',p:'Beta 看你跟大盤同步的程度；Alpha 看扣除大盤後多賺了多少。',x:'=SLOPE(組合,大盤)　=INTERCEPT(組合,大盤)',s:'E'},
+ expret:{c:'投資績效',n:'組合期望回報',f:'期望回報 = Σ 權重 × 各資產期望回報',p:'整個組合的平均預期回報。',x:'=SUMPRODUCT(權重,回報)',s:'C'},
+ lev:{c:'槓桿',n:'槓桿倍數',f:'槓桿倍數 = 實際控制的金額 ÷ 自己投入的錢',p:'放大了多少倍，賺和虧都會一起放大。',x:'=名義金額/自有資金',s:'H'},
+ levret:{c:'槓桿',n:'槓桿後自有資金回報',f:'自有回報 = (總投入 × r − 借款 × 借款利率) ÷ 自有資金',p:'借錢投資後，自己那份錢真正賺或虧多少。',x:'=(T*r-D*i)/E',s:'H'},
+ breakeven:{c:'槓桿',n:'保本回報',f:'保本回報 = 借款 × 借款利率 ÷ 總投入',p:'回報低於這個數字，借錢投資就開始虧。',x:'=D*i/T',s:'H'},
+ wipe:{c:'槓桿',n:'本金虧光的回報',f:'虧光點 = (借款 × 借款利率 − 自有資金) ÷ 總投入',p:'回報跌到這裡，自己投入的錢就全部虧光。',x:'=(D*i-E)/T',s:'H'},
+ winrate:{c:'槓桿',n:'勝率與盈虧比',f:'勝率 = 賺錢筆數 ÷ 總筆數；盈虧比 = 平均賺 ÷ 平均虧',p:'勝率高不代表賺錢，要同時看盈虧比。',x:'=COUNTIF(盈虧,">0")/COUNT(盈虧)',s:'H'},
+ expect:{c:'槓桿',n:'每筆期望值',f:'期望值 = 勝率 × 平均賺 − (1 − 勝率) × 平均虧',p:'負數代表長期做下去會虧錢。',x:'=勝率*平均賺-(1-勝率)*平均虧',s:'H'},
+ inslev:{c:'保障',n:'保障槓桿',f:'保障槓桿 = 保額 ÷ 累積已繳保費',p:'每一元保費撬動多少保障。越早發生理賠，槓桿越高。',x:'=保額/(年保費*已繳年數)',s:'C F'},
+ per1m:{c:'保障',n:'每 100 萬保額成本',f:'每 100 萬保額年保費 = 年保費 ÷ (保額 ÷ 1,000,000)',p:'同類產品橫向比較的標準尺子。',x:'=年保費/(保額/1000000)',s:'C'},
+ ciyears:{c:'保障',n:'重疾理賠撐幾年',f:'可撐年數 = 重疾保額 ÷ 年收入',p:'生病不能工作時，理賠金能代替幾年收入。',x:'=保額/(月收入*12)',s:'H'},
+ cigap:{c:'保障',n:'重疾需求缺口',f:'總需求 = 收入替代 + 治療康復費 + 負債清償 + 應急金\n缺口 = max(總需求 − 現有保額 − 可動用專項資金, 0)',p:'收入替代 = max(年支出 − 年被動收入, 0) × 康復年數。',x:'=MAX(總需求-現有保額-專項資金,0)',s:'B C'},
+ lifegap:{c:'保障',n:'人壽缺口',f:'人壽缺口 = 家庭生活費現值 + 負債 + 稅務壓測 + 應急池 − 願意保留的準備金',p:'身故那一刻家庭需要立即到位的現金。',x:'=生活費PV+負債+稅務+應急-準備金',s:'C'},
+ medgap:{c:'保障',n:'醫療缺口',f:'醫療缺口 = 目標醫療保額 − 現有醫療保障',p:'一場大病的費用，有多少要自己付。',x:'=MAX(目標-現有,0)',s:'F'},
+ grossup:{c:'稅務與傳承',n:'稅前所需現金流',f:'稅前所需 = 稅後目標現金流 ÷ (1 − 有效稅率)',p:'想稅後到手一筆錢，稅前要有多少。',x:'=稅後目標/(1-稅率)',s:'B'},
+ taxres:{c:'稅務與傳承',n:'稅務準備金與缺口',f:'準備金 = 應稅資產 × 預估稅率 + 法律及執行成本\n缺口 = max(準備金 − 已備準備金, 0)',p:'處理稅務、傳承時要準備的流動資金。',x:'=MAX(資產*稅率+成本-已備,0)',s:'B'},
+ estate:{c:'稅務與傳承',n:'遺產稅壓測',f:'稅額 = max(0, (總資產 − 免稅額) × 稅率)',p:'用幾個假設稅率測試，看最壞要準備多少現金。',x:'=MAX(0,(資產-免稅額)*稅率)',s:'C'},
+ loss:{c:'稅務與傳承',n:'變現損耗與家人實際可得',f:'損耗 = 市值 × 損耗率\n家人實際可得 = 總資產 − 總損耗 − 債務暴露',p:'房產、股權急售時的稅費和折價。損耗率要按當時法規重新核實。',x:'=總資產-SUMPRODUCT(市值,損耗率)-債務暴露',s:'F'},
+ stress:{c:'壓力測試',n:'壓測後資產',f:'壓測後資產 = Σ 各項資產 × (1 − 假設跌幅)',p:'市場大跌時，資產會縮到多少。',x:'=SUMPRODUCT(資產,1-跌幅)',s:'C'},
+ survive:{c:'壓力測試',n:'最低生存現金流與預備金',f:'最低生存現金流 = 固定支出 + 債務利息 + 子女費用\n預備金 = 6 至 24 個月 × 最低生存現金流',p:'最壞情況下每月一定要付的錢，要準備多少個月。',x:'=最低生存現金流*月數',s:'C'},
+ bep:{c:'創業',n:'保本營業額',f:'保本營業額 = 每月固定成本 ÷ 毛利率',p:'每個月至少要賣這麼多才不虧本。',x:'=固定成本/毛利率',s:'H'},
+ netp:{c:'創業',n:'每月淨利',f:'月淨利 = 月營業額 × 毛利率 − 每月固定成本',p:'扣掉貨物成本和固定開支後真正賺到的錢。',x:'=營業額*毛利率-固定成本',s:'H'},
+ payback:{c:'創業',n:'回本期',f:'回本期 = 啟動資金 ÷ 每月淨利',p:'多少個月能拿回開業時投入的錢。',x:'=啟動資金/月淨利',s:'H'},
+ runway:{c:'創業',n:'週轉金能撐多久',f:'可撐月數 = 週轉金 ÷ 每月虧損',p:'很多生意不是不賺錢，而是撐不到賺錢那天。',x:'=週轉金/每月虧損',s:'H'},
+ hourly:{c:'創業',n:'創業時薪',f:'時薪 = 每月淨利 ÷ 每月投入工時',p:'拿來跟打工收入比較，看值不值得花時間。',x:'=月淨利/工時',s:'H'},
+ succ:{c:'創業',n:'創業成功率',f:'成功率 = 成功項目數 ÷ 已結束項目數',p:'累積多個項目後，看自己判斷生意的準確度。',x:'=COUNTIF(狀態,"成功")/COUNTIF(狀態,"已結束*")',s:'H'},
+ oppcost:{c:'機會比較',n:'機會成本',f:'機會成本 = 最好選擇的期末值 − 這個選擇的期末值',p:'選了這個，等於放棄了多少。',x:'=MAX(期末值)-期末值',s:'G H'},
+ retdd:{c:'機會比較',n:'回報風險比',f:'回報風險比 = 預期年回報 ÷ 最大可能跌幅',p:'每承受一份下跌，換來多少回報。',x:'=回報/跌幅',s:'E'},
+ ccr:{c:'公司分析',n:'現金轉換率',f:'現金轉換率 = 營業現金流 ÷ 淨利',p:'賺到的利潤有多少是真金白銀。',x:'=營業現金流/淨利',s:'E'},
+ dso:{c:'公司分析',n:'應收、存貨與現金週期',f:'DSO = 應收帳款 ÷ (營收 ÷ 365)\nDIO = 存貨 ÷ (銷貨成本 ÷ 365)\n現金週期 = DSO + DIO − DPO',p:'錢從付出去到收回來要多少天。',x:'=應收/(營收/365)',s:'E'},
+ fcf:{c:'公司分析',n:'自由現金流產出率',f:'FCF 產出率 = (營業現金流 − 資本支出) ÷ 營收',p:'每 100 元營收，最後真正能自由使用的現金。',x:'=(營業現金流-資本支出)/營收',s:'E'},
+ roic:{c:'公司分析',n:'投入資本回報 ROIC',f:'ROIC = 稅後營業利潤 ÷ 投入資本',p:'公司用每一元資本能賺多少。',x:'=營業利益*(1-稅率)/投入資本',s:'E'},
+ wacc:{c:'公司分析',n:'加權資本成本 WACC',f:'WACC = 股本比例 × 股本成本 + 債務比例 × 債務成本 × (1 − 稅率)',p:'公司拿錢的平均成本。ROIC 要高過它才算創造價值。',x:'=(E/V)*Re+(D/V)*Rd*(1-Tc)',s:'E'},
+ npv:{c:'公司分析',n:'淨現值 NPV',f:'NPV = Σ 現金流 ÷ (1 + 折現率)^t − 初始投入',p:'大於 0 才值得做。',x:'=NPV(折現率,現金流)+初始投入',s:'E G'},
+ gm:{c:'公司分析',n:'毛利率',f:'毛利率 = 毛利 ÷ 營收',p:'產品有沒有定價能力。長期穩定或上升，是優勢的跡象。',x:'=毛利/營收',s:'E H'},
+ roe:{c:'公司分析',n:'股東權益回報 ROE',f:'ROE = 淨利 ÷ 股東權益',p:'每一元股東本錢一年賺多少。要配合負債一起看，借很多錢也能把 ROE 推高。',x:'=淨利/股東權益',s:'H'},
+ debtratio:{c:'公司分析',n:'負債比率',f:'負債比率 = 總負債 ÷ 總資產',p:'公司的資產有多少是借回來的。',x:'=總負債/總資產',s:'H'},
+ icov:{c:'公司分析',n:'利息覆蓋倍數',f:'利息覆蓋倍數 = 營業利潤 ÷ 利息支出',p:'利潤夠付幾次利息。倍數越低，經濟一差就越危險。',x:'=營業利潤/利息支出',s:'H'},
+ fcfy:{c:'公司分析',n:'自由現金流收益率',f:'FCF 收益率 = (營業現金流 − 資本支出) ÷ 市值',p:'用現在的價格買下整家公司，每年能拿回多少真金白銀。',x:'=(營業現金流-資本支出)/市值',s:'H'},
+ moat:{c:'公司分析',n:'護城河檢查',f:'把毛利率、ROE、現金轉換率按年份排在一起看趨勢',p:'一年好看可能是運氣，連續很多年都好，才是能持續的優勢。',x:'每年一行，比較同一欄的變化',s:'H'},
+ lossasym:{c:'投資紀律',n:'虧損不對稱',f:'回本需要的漲幅 = 1 ÷ (1 − 跌幅) − 1',p:'跌 50% 要漲 100% 才回本。所以第一條規則是不要大虧。',x:'=1/(1-跌幅)-1',s:'H'},
+ kelly:{c:'投資紀律',n:'凱利公式（倉位）',f:'最佳投入比例 = 勝率 − (1 − 勝率) ÷ 賠率\n賠率 = 平均每次贏 ÷ 平均每次輸',p:'有優勢也不能押太大；算出零或負數就不該參與。股票的勝率和賠率很難算準，實際只用一半或更少。',x:'=勝率-(1-勝率)/賠率',s:'H'},
+ mos:{c:'投資紀律',n:'安全邊際',f:'安全邊際 = (你估算的價值 − 市價) ÷ 你估算的價值',p:'價格比你估算的價值低多少，就是你可以判斷錯的空間。',x:'=(估算價值-市價)/估算價值',s:'E H'},
+ levfin:{c:'公司分析',n:'財務槓桿',f:'財務槓桿 = 總資產 ÷ 股東權益',p:'公司借了多少錢來經營。',x:'=總資產/權益',s:'E'}
+};
+function fcard(k){const f=F[k];if(!f)return '';return `<div class="fcard"><div class="fname">${f.n}</div><div class="fexpr">${esc(f.f)}</div><p class="muted">${f.p}</p><div class="fexcel"><span>EXCEL</span><code>${esc(f.x)}</code></div><div class="fsrc">出處：${f.s.split(' ').map(s=>SRC[s]).join('、')}</div></div>`}
+function fx(keys){return `<div class="fxs">${keys.map(k=>`<details class="fx"><summary>看公式：${F[k].n}</summary>${fcard(k)}</details>`).join('')}</div>`}
+
+/* ================= 衍生數字 ================= */
+function monthAgg(){
+  const m={};
+  get('income').forEach(r=>{if(!r.m)return;const o=m[r.m]||(m[r.m]={inc:0,pas:0,exp:0});const a=N(r.amt)||0;o.inc+=a;if(r.type==='被動')o.pas+=a});
+  get('expense').forEach(r=>{if(!r.m)return;const o=m[r.m]||(m[r.m]={inc:0,pas:0,exp:0});o.exp+=N(r.amt)||0});
+  return m;
+}
+function recent(){
+  const m=monthAgg();const ks=Object.keys(m).sort().slice(-6);
+  if(!ks.length)return {n:0};
+  const s=ks.reduce((a,k)=>{a.inc+=m[k].inc;a.pas+=m[k].pas;a.exp+=m[k].exp;return a},{inc:0,pas:0,exp:0});
+  const last=ks[ks.length-1];
+  return {n:ks.length,inc:s.inc/ks.length,pas:s.pas/ks.length,exp:s.exp/ks.length,last,lm:m[last]};
+}
+function investSummary(){
+  const by={};
+  get('invest').forEach(r=>{if(!r.name)return;(by[r.name]=by[r.name]||[]).push(r)});
+  const out=[];const all=[];
+  Object.keys(by).forEach(name=>{
+    const rows=by[name].filter(r=>r.d&&ok(N(r.amt))).sort((a,b)=>a.d<b.d?-1:1);
+    let inv=0,out2=0;const fl=[];const vals=[];
+    rows.forEach(r=>{const a=N(r.amt);const d=new Date(r.d);
+      if(r.kind==='投入'){inv+=a;fl.push({d,a:-a})}
+      else if(r.kind==='取回'){out2+=a;fl.push({d,a})}
+      else if(r.kind==='現值'){vals.push({d,a})}});
+    const lastV=vals.length?vals[vals.length-1]:null;
+    const flx=fl.slice();if(lastV)flx.push({d:lastV.d,a:lastV.a});
+    let peak=-Infinity,mdd=0;vals.forEach(v=>{if(v.a>peak)peak=v.a;if(peak>0)mdd=Math.min(mdd,v.a/peak-1)});
+    const value=lastV?lastV.a:NaN;
+    out.push({name,inv,out:out2,value,pnl:(ok(value)?value:0)+out2-inv,irr:xirr(flx),mdd:vals.length>1?mdd:NaN});
+    fl.forEach(x=>all.push(x));if(lastV)all.push({d:lastV.d,a:lastV.a});
+  });
+  const total=out.reduce((s,o)=>s+(ok(o.value)?o.value:0),0);
+  return {list:out,total,irr:xirr(all)};
+}
+function debtSummary(){
+  let bal=0,pay=0;get('debts').forEach(r=>{bal+=N(r.bal)||0;pay+=N(r.pay)||0});return {bal,pay};
+}
+function assetSummary(){
+  let cash=0,other=0;get('assets').forEach(r=>{const a=N(r.amt)||0;if(r.cat==='現金')cash+=a;else other+=a});return {cash,other};
+}
+function xirr(fl){
+  fl=fl.filter(x=>ok(x.a)&&x.d instanceof Date&&!isNaN(x.d)).sort((a,b)=>a.d-b.d);
+  if(fl.length<2||!fl.some(x=>x.a>0)||!fl.some(x=>x.a<0))return NaN;
+  const d0=fl[0].d;const f=r=>fl.reduce((s,x)=>s+x.a/Math.pow(1+r,(x.d-d0)/31557600000),0);
+  let lo=-0.9999,hi=10,flo=f(lo),fhi=f(hi);if(!ok(flo)||!ok(fhi)||flo*fhi>0)return NaN;
+  for(let i=0;i<200;i++){const m=(lo+hi)/2,fm=f(m);if(Math.abs(fm)<1e-8)return m;if(flo*fm<0)hi=m;else{lo=m;flo=fm}}
+  return (lo+hi)/2;
+}
+function payoff(B,rate,P){
+  if(!(B>0)||!(P>0))return null;const i=(rate||0)/1200;if(P<=B*i)return {never:true};
+  let b=B,m=0,int=0;while(b>0.005&&m<1200){const it=b*i;int+=it;b=b+it-P;m++}return {m,int};
+}
+function fvCalc(rm,n,pmt,pv){const g=Math.pow(1+rm,n);return pv*g+(rm?pmt*(g-1)/rm:pmt*n)}
+function nperCalc(rm,pmt,pv,fv){
+  if(pv>=fv)return 0;
+  if(!rm)return pmt>0?(fv-pv)/pmt:Infinity;
+  const a=fv*rm+pmt,b=pv*rm+pmt;if(b<=0||a/b<=0)return Infinity;
+  const n=Math.log(a/b)/Math.log(1+rm);return n>0?n:Infinity;
+}
+function pmtCalc(rm,n,pv,fv){if(!(n>0))return NaN;const g=Math.pow(1+rm,n);return rm?(fv-pv*g)*rm/(g-1):(fv-pv)/n}
+function rateCalc(n,pmt,pv,fv){
+  if(!(n>0))return NaN;const f=r=>fvCalc(r/12,n,pmt,pv)-fv;let lo=-0.99,hi=2;
+  if(f(lo)>0)return lo;if(f(hi)<0)return NaN;
+  for(let i=0;i<200;i++){const m=(lo+hi)/2;if(f(m)>0)hi=m;else lo=m}return (lo+hi)/2;
+}
+
+/* ================= 通用表格 ================= */
+const SCHEMA={
+ income:{cols:[{k:'m',l:'月份',t:'month'},{k:'src',l:'來源',t:'text',dl:'dl-src'},{k:'type',l:'類型',t:'sel',o:['主動','被動']},{k:'amt',l:'金額',t:'num'},{k:'note',l:'備註',t:'text'}],
+   add:()=>({m:thisMonth(),src:'',type:'主動',amt:'',note:''})},
+ expense:{cols:[{k:'m',l:'月份',t:'month'},{k:'cat',l:'類別',t:'text',dl:'dl-cat'},{k:'amt',l:'金額',t:'num'},{k:'note',l:'備註',t:'text'}],
+   add:()=>({m:thisMonth(),cat:'',amt:'',note:''})},
+ assets:{cols:[{k:'name',l:'資產',t:'text'},{k:'cat',l:'類別',t:'sel',o:['現金','房產','保單現金價值','其他']},{k:'amt',l:'金額',t:'num'}],
+   add:()=>({name:'',cat:'現金',amt:''})},
+ debts:{cols:[{k:'name',l:'借貸名稱',t:'text'},{k:'bal',l:'剩餘欠款',t:'num'},{k:'rate',l:'年利率 %',t:'num'},{k:'pay',l:'每月還款',t:'num'},{k:'extra',l:'每月多還（試算）',t:'num'}],
+   comp:[{l:'還清需要',fn:r=>{const p=payoff(N(r.bal),N(r.rate),N(r.pay));return !p?'–':p.never?'<span class="tag bad">月供不夠付利息</span>':months(p.m)}},
+         {l:'剩餘總利息',fn:r=>{const p=payoff(N(r.bal),N(r.rate),N(r.pay));return p&&!p.never?money(p.int):'–'}},
+         {l:'多還可省利息',fn:r=>{const e=N(r.extra);if(!(e>0))return '–';const a=payoff(N(r.bal),N(r.rate),N(r.pay)),b=payoff(N(r.bal),N(r.rate),N(r.pay)+e);if(!b||b.never)return '–';if(!a||a.never)return '提早 '+months(b.m)+' 還清';return money(a.int-b.int)+'，早 '+months(a.m-b.m)}}],
+   add:()=>({name:'',bal:'',rate:'',pay:'',extra:''})},
+ invest:{cols:[{k:'name',l:'投資名稱',t:'text',dl:'dl-inv'},{k:'d',l:'日期',t:'date'},{k:'kind',l:'記錄類型',t:'sel',o:['投入','取回','現值']},{k:'amt',l:'金額',t:'num'}],
+   add:()=>({name:'',d:today(),kind:'投入',amt:''})},
+ trades:{cols:[{k:'d',l:'日期',t:'date'},{k:'sym',l:'標的',t:'text'},{k:'kind',l:'類型',t:'sel',o:['買入期權','賣出期權','融資買股','期貨','外匯','其他']},{k:'cap',l:'自己投入',t:'num'},{k:'notional',l:'實際控制金額',t:'num'},{k:'pnl',l:'盈虧',t:'num'},{k:'maxloss',l:'最多可能虧',t:'num'},{k:'over',l:'虧損會超過本金？',t:'sel',o:['否','是']}],
+   comp:[{l:'槓桿倍數',fn:r=>{const c=N(r.cap),n=N(r.notional);return c>0&&n>0?num(n/c,1)+' 倍':'–'}},
+         {l:'回報率',fn:r=>{const c=N(r.cap),p=N(r.pnl);return c>0&&ok(p)?pct(p/c):'–'}},
+         {l:'風險',fn:r=>r.over==='是'||r.kind==='賣出期權'?'<span class="tag bad">可能虧超過本金</span>':'<span class="tag ok">虧損有上限</span>'}],
+   add:()=>({d:today(),sym:'',kind:'買入期權',cap:'',notional:'',pnl:'',maxloss:'',over:'否'})},
+ biz:{cols:[{k:'name',l:'項目名稱',t:'text'},{k:'status',l:'狀態',t:'sel',o:['構思中','進行中','已結束－成功','已結束－失敗']},{k:'start',l:'啟動資金',t:'num'},{k:'fixed',l:'每月固定成本',t:'num'},{k:'gm',l:'毛利率 %',t:'num'},{k:'sales',l:'每月營業額',t:'num'},{k:'hours',l:'每月工時',t:'num'},{k:'cashres',l:'週轉金',t:'num'},{k:'profit',l:'實際累計利潤',t:'num'}],
+   comp:[{l:'保本營業額',fn:r=>{const g=N(r.gm)/100,f=N(r.fixed);return g>0&&ok(f)?money(f/g):'–'}},
+         {l:'每月淨利',fn:r=>{const v=bizNet(r);return ok(v)?money(v):'–'}},
+         {l:'回本期',fn:r=>{const v=bizNet(r),s=N(r.start);return v>0&&ok(s)?months(s/v):(ok(v)?'<span class="tag bad">未盈利</span>':'–')}},
+         {l:'週轉金可撐',fn:r=>{const v=bizNet(r),c=N(r.cashres),f=N(r.fixed);if(!ok(c))return '–';if(ok(v)&&v<0)return months(c/(-v));if(ok(v)&&v>=0)return '已不用動用'+(f>0?'；零生意時 '+months(c/f):'');return f>0?'零生意時 '+months(c/f):'–'}},
+         {l:'時薪',fn:r=>{const v=bizNet(r),h=N(r.hours);return ok(v)&&h>0?money(v/h):'–'}}],
+   add:()=>({name:'',status:'構思中',start:'',fixed:'',gm:'',sales:'',hours:'',cashres:'',profit:''})},
+ compare:{cols:[{k:'name',l:'選擇',t:'text'},{k:'amt',l:'投入金額',t:'num'},{k:'ret',l:'預期年回報 %',t:'num'},{k:'safe',l:'安全性 1–5',t:'num'},{k:'lock',l:'鎖定年數',t:'num'},{k:'dd',l:'最大可能跌幅 %',t:'num'}],
+   comp:[{l:'期末值',fn:r=>money(cmpFV(r))},
+         {l:'機會成本',fn:r=>{const b=cmpBest(),v=cmpFV(r);return ok(b)&&ok(v)?(b-v<0.5?'<span class="tag ok">目前最好</span>':money(b-v)):'–'}},
+         {l:'回報風險比',fn:r=>{const a=N(r.ret),d=N(r.dd);return ok(a)&&d>0?num(a/d,2):'–'}},
+         {l:'流動性',fn:r=>{const l=N(r.lock),y=cmpYears();if(!ok(l))return '–';return l<=0?'<span class="tag ok">隨時可用</span>':(ok(y)&&l>y?'<span class="tag bad">比較期內取不出</span>':'<span class="tag warn">鎖 '+l+' 年</span>')}}],
+   add:()=>({name:'',amt:'',ret:'',safe:'',lock:'',dd:''})},
+ firms:{cols:[{k:'name',l:'公司',t:'text',dl:'dl-firm'},{k:'yr',l:'年度',t:'num'},{k:'rev',l:'營收',t:'num'},{k:'gp',l:'毛利',t:'num'},{k:'op',l:'營業利潤',t:'num'},{k:'ni',l:'淨利',t:'num'},{k:'int',l:'利息支出',t:'num'},{k:'ocf',l:'營業現金流',t:'num'},{k:'capex',l:'資本支出',t:'num'},{k:'ta',l:'總資產',t:'num'},{k:'tl',l:'總負債',t:'num'},{k:'eq',l:'股東權益',t:'num'},{k:'mcap',l:'市值',t:'num'},{k:'iv',l:'你估算的價值',t:'num'}],
+   comp:[{l:'毛利率',fn:r=>rat(r.gp,r.rev,1)},{l:'ROE',fn:r=>rat(r.ni,r.eq,1)},{l:'現金轉換率',fn:r=>{const v=N(r.ocf)/N(r.ni);return ok(v)&&N(r.ni)>0?num(v,2)+(v<1?' <span class="tag warn">利潤多於現金</span>':''):'–'}},{l:'負債比率',fn:r=>rat(r.tl,r.ta,0)},{l:'利息覆蓋',fn:r=>{const v=N(r.op)/N(r.int);return ok(v)&&N(r.int)>0?num(v,1)+' 倍':'–'}},{l:'FCF 收益率',fn:r=>{const v=(N(r.ocf)-(N(r.capex)||0))/N(r.mcap);return ok(v)&&N(r.mcap)>0?pct(v):'–'}},{l:'安全邊際',fn:r=>{const iv=N(r.iv),m=N(r.mcap);if(!(iv>0)||!(m>0))return '–';const v=(iv-m)/iv;return pct(v,0)+(v<0?' <span class="tag bad">價格高於估值</span>':'')}}],
+   add:()=>({name:'',yr:'',rev:'',gp:'',op:'',ni:'',int:'',ocf:'',capex:'',ta:'',tl:'',eq:'',mcap:'',iv:''})},
+ ins:{cols:[{k:'type',l:'類型',t:'sel',o:['人壽','重疾','醫療']},{k:'name',l:'產品或計劃書',t:'text'},{k:'prem',l:'每年保費',t:'num'},{k:'years',l:'繳費年數',t:'num'},{k:'sum',l:'保額（醫療填每年保障額）',t:'num'}],
+   comp:[{l:'總保費',fn:r=>{const p=N(r.prem),y=N(r.years);return r.type==='醫療'?(ok(p)?money(p)+'／年':'–'):(ok(p)&&ok(y)?money(p*y):'–')}},
+         {l:'槓桿',fn:r=>{const p=N(r.prem),y=N(r.years),s=N(r.sum);if(!(p>0)||!ok(s))return '–';return r.type==='醫療'?num(s/p,1)+' 倍（每年）':(y>0?num(s/(p*y),1)+' 倍（繳完時）；第一年 '+num(s/p,1)+' 倍':'–')}},
+         {l:'每 100 萬保額年保費',fn:r=>{const p=N(r.prem),s=N(r.sum);return p>0&&s>0?money(p/(s/1e6)):'–'}},
+         {l:'可撐幾年收入',fn:r=>{if(r.type!=='重疾')return '–';const s=N(r.sum),rc=recent();return s>0&&rc.inc>0?num(s/(rc.inc*12),1)+' 年':'先記錄收入'}}],
+   add:()=>({type:'人壽',name:'',prem:'',years:'',sum:''})}
+};
+function rat(a,b,d){const v=N(a)/N(b);return ok(v)&&N(b)!==0?pct(v,d):'–'}
+function bizNet(r){const g=N(r.gm)/100,s=N(r.sales),f=N(r.fixed);return ok(g)&&ok(s)&&ok(f)?s*g-f:NaN}
+function cmpYears(){return N(S.cmpYears)}
+function cmpFV(r){const a=N(r.amt),x=N(r.ret)/100,y=cmpYears();return ok(a)&&ok(x)&&ok(y)?a*Math.pow(1+x,y):NaN}
+function cmpBest(){const v=get('compare').map(cmpFV).filter(ok);return v.length?Math.max(...v):NaN}
+
+function table(key){
+  const sc=SCHEMA[key],rows=get(key),comp=sc.comp||[];
+  const head=sc.cols.map(c=>`<th>${c.l}</th>`).join('')+comp.map(c=>`<th class="cvh">${c.l}</th>`).join('')+'<th></th>';
+  const body=rows.length?rows.map((r,i)=>`<tr>${sc.cols.map(c=>`<td>${cell(key,i,c,r[c.k])}</td>`).join('')}${comp.map((c,ci)=>`<td class="cv" data-ck="${key}" data-i="${i}" data-ci="${ci}">${c.fn(r)}</td>`).join('')}<td><button type="button" class="del" data-del="${key}" data-i="${i}" aria-label="刪除這一筆">×</button></td></tr>`).join('')
+    :`<tr><td colspan="${sc.cols.length+comp.length+1}" class="empty">還沒有記錄。按下面的「新增一筆」開始。</td></tr>`;
+  return `<div class="tbl-wrap"><table class="tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div><button type="button" class="btn small ghost" data-add="${key}">＋ 新增一筆</button>`;
+}
+function cell(key,i,c,v){
+  const a=`data-t="${key}" data-i="${i}" data-k="${c.k}" id="${key}-${i}-${c.k}" aria-label="${c.l}"`;
+  if(c.t==='sel')return `<select ${a}>${c.o.map(o=>`<option${o===v?' selected':''}>${o}</option>`).join('')}</select>`;
+  const type=c.t==='num'?'number':c.t==='month'?'month':c.t==='date'?'date':'text';
+  return `<input type="${type}" ${a} value="${esc(v)}"${c.t==='num'?' inputmode="decimal" step="any"':''}${c.dl?` list="${c.dl}"`:''}>`;
+}
+function recalcCells(){
+  document.querySelectorAll('td.cv').forEach(td=>{const sc=SCHEMA[td.dataset.ck];const r=get(td.dataset.ck)[+td.dataset.i];if(sc&&r)td.innerHTML=sc.comp[+td.dataset.ci].fn(r)});
+}
+function form(obj,fields){
+  const o=get(obj);
+  return `<div class="fields">${fields.map(f=>{
+    const id=`${obj}-${f.k}`;
+    if(f.t==='sel')return `<label class="f" for="${id}">${f.l}<select id="${id}" data-o="${obj}" data-k="${f.k}">${f.o.map(x=>`<option value="${x[0]}"${o[f.k]===x[0]?' selected':''}>${x[1]}</option>`).join('')}</select></label>`;
+    return `<label class="f" for="${id}">${f.l}<input type="${f.t||'number'}" id="${id}" data-o="${obj}" data-k="${f.k}" value="${esc(o[f.k]==null?'':o[f.k])}"${(f.t||'number')==='number'?' inputmode="decimal" step="any"':''}${f.ph?` placeholder="${esc(f.ph)}"`:''}></label>`;
+  }).join('')}</div>`;
+}
+
+/* ================= 各分區 ================= */
+const DL=`<datalist id="dl-src"><option>佣金</option><option>薪金</option><option>租金</option><option>股息</option><option>利息</option><option>保單提取</option><option>副業</option></datalist>
+<datalist id="dl-cat"><option>住屋</option><option>飲食</option><option>交通</option><option>保險</option><option>醫療</option><option>子女教育</option><option>稅務</option><option>還款</option><option>家用</option><option>學習</option><option>娛樂</option><option>其他</option></datalist>`;
+function invDL(){const s=new Set(get('invest').map(r=>r.name).filter(Boolean));return `<datalist id="dl-inv">${[...s].map(n=>`<option>${esc(n)}</option>`).join('')}</datalist>`}
+function lead(t,d){return `<div class="lead"><h2>${t}</h2><p class="muted">${d}</p></div>`}
+
+const TABS=[
+{id:'home',name:'總覽',html:()=>`<section class="sheet">${lead('財富總覽','所有數字都從你的記錄自動算出。先在各分區記錄，這裡就會亮起來。')}<div id="sum"></div></section>
+ <section class="sheet"><h3>其他資產（投資以外）</h3><p class="muted">現金、房產、保單現金價值等。類別選「現金」的會用來計算應急金。</p>${table('assets')}</section>
+ <section class="sheet"><h3>這一頁用到的公式</h3>${fx(['networth','surplus','saverate','emergency','passcover','debtcover','xirr'])}</section>
+ <section class="sheet"><h3>資料與備份</h3><p class="muted">為了不再丟失，可以定期按「複製備份」，把內容貼到 Notion 或備忘錄存起來。需要還原時，把備份貼到下面再按「還原」。</p>
+ <div class="row"><button type="button" class="btn small" id="bk-copy">複製備份</button><span class="muted" id="bk-msg" aria-live="polite"></span></div>
+ <label class="f" for="bk-text">貼上備份內容<textarea id="bk-text"></textarea></label><button type="button" class="btn small ghost" id="bk-restore">用貼上的內容還原</button></section>`,
+ sum:()=>{
+  const rc=recent(),inv=investSummary(),db=debtSummary(),as=assetSummary();
+  const net=as.cash+as.other+inv.total-db.bal;
+  const sur=rc.n?rc.lm.inc-rc.lm.exp:NaN,sr=rc.n&&rc.lm.inc>0?sur/rc.lm.inc:NaN;
+  const em=rc.exp>0?as.cash/rc.exp:NaN,pc=rc.exp>0?rc.pas/rc.exp:NaN,dc=db.pay>0?rc.pas/db.pay:NaN;
+  return `<div class="tiles">
+   ${kv('淨資產',money(net),'','現金＋其他資產＋投資現值－負債')}
+   ${kv('最近一個月結餘',money(sur),ok(sur)?(sur>=0?'ok':'bad'):'',rc.n?rc.last:'先記錄收入和支出')}
+   ${kv('儲蓄率',pct(sr),'',rc.n?rc.last:'')}
+   ${kv('應急金夠幾個月',ok(em)?num(em,1)+' 個月':'–',cls(em,12,6),'目標 12 個月')}
+   ${kv('被動收入覆蓋生活',pct(pc,0),cls(pc,1,0.5),'達 100% 即財務自由')}
+   ${kv('被動收入覆蓋還款',db.pay>0?pct(dc,0):'沒有借貸',db.pay>0?cls(dc,1,0.5):'ok','達 100% 即不靠工作也能還債')}
+   ${kv('投資整體年化回報',pct(inv.irr),'','XIRR，所有投資合計')}
+   ${kv('總負債',money(db.bal),'','每月還款 '+money(db.pay))}
+  </div>${chart()}`}},
+{id:'income',name:'收入',html:()=>`<section class="sheet">${lead('收入記錄：你的賺錢能力','每個月按來源記一筆。類型分「主動」（要工作才有）和「被動」（不工作也有，例如租金、股息、利息）。')}${table('income')}</section><section class="sheet"><h3>每月統計</h3><div id="sum"></div>${fx(['passcover','surplus'])}</section>`,
+ sum:()=>{const m=monthAgg();const ks=Object.keys(m).sort().reverse().slice(0,12);if(!ks.length)return '<p class="empty">還沒有收入記錄。</p>';
+  return `<div class="tbl-wrap"><table class="tbl read"><thead><tr><th>月份</th><th>總收入</th><th>其中被動</th><th>被動佔比</th></tr></thead><tbody>${ks.map(k=>`<tr><td>${k}</td><td>${money(m[k].inc)}</td><td>${money(m[k].pas)}</td><td>${m[k].inc>0?pct(m[k].pas/m[k].inc,0):'–'}</td></tr>`).join('')}</tbody></table></div>`}},
+{id:'expense',name:'支出',html:()=>`<section class="sheet">${lead('支出記錄','每個月按類別記。如果「還款」已經記在這裡，總覽的債務數字就不要重複加。')}${table('expense')}</section><section class="sheet"><h3>每月統計</h3><div id="sum"></div>${fx(['saverate','surplus','emergency'])}</section>`,
+ sum:()=>{const m=monthAgg();const ks=Object.keys(m).sort().reverse().slice(0,12);if(!ks.length)return '<p class="empty">還沒有支出記錄。</p>';
+  const last=ks[0];const cat={};get('expense').filter(r=>r.m===last).forEach(r=>{const c=r.cat||'未分類';cat[c]=(cat[c]||0)+(N(r.amt)||0)});
+  const tot=Object.values(cat).reduce((a,b)=>a+b,0);
+  return `<div class="tbl-wrap"><table class="tbl read"><thead><tr><th>月份</th><th>收入</th><th>支出</th><th>結餘</th><th>儲蓄率</th></tr></thead><tbody>${ks.map(k=>{const s=m[k].inc-m[k].exp;return `<tr><td>${k}</td><td>${money(m[k].inc)}</td><td>${money(m[k].exp)}</td><td>${money(s)}</td><td>${m[k].inc>0?pct(s/m[k].inc,0):'–'}</td></tr>`}).join('')}</tbody></table></div>
+  <h3>${last} 支出分佈</h3><div class="tbl-wrap"><table class="tbl read"><tbody>${Object.keys(cat).sort((a,b)=>cat[b]-cat[a]).map(c=>`<tr><td>${esc(c)}</td><td>${money(cat[c])}</td><td>${tot>0?pct(cat[c]/tot,0):'–'}</td></tr>`).join('')}</tbody></table></div>`}},
+{id:'debts',name:'借貸',html:()=>`<section class="sheet">${lead('借貸記錄','每一筆債記一行。填「每月多還」可以試算提早還清能省多少利息。')}${table('debts')}</section><section class="sheet"><h3>債務總覽</h3><div id="sum"></div>${fx(['payoff','interest','debtcover','ipmt'])}</section>`,
+ sum:()=>{const d=debtSummary(),rc=recent();let tint=0,maxm=0,never=false;get('debts').forEach(r=>{const p=payoff(N(r.bal),N(r.rate),N(r.pay));if(p){if(p.never)never=true;else{tint+=p.int;maxm=Math.max(maxm,p.m)}}});
+  const dc=d.pay>0?rc.pas/d.pay:NaN;
+  return `<div class="tiles">${kv('總欠款',money(d.bal))}${kv('每月還款合計',money(d.pay))}${kv('剩餘總利息',never?'有一筆還不完':money(tint),never?'bad':'')}${kv('全部還清需要',months(maxm||null))}${kv('債務覆蓋率',d.pay>0?pct(dc,0):'–',cls(dc,1,0.5),'被動收入 ÷ 每月還款')}${kv('被動收入還差',d.pay>0&&rc.n?money(Math.max(0,d.pay-rc.pas))+'／月':'–','','要達到 100% 覆蓋')}</div>`}},
+{id:'invest',name:'投資',html:()=>`<section class="sheet">${lead('投資記錄','每次投入、取回，以及每隔一段時間的「現值」都記一行，同一個投資用同一個名稱。系統會用 XIRR 算出真實年化回報。')}${invDL()}${table('invest')}</section><section class="sheet"><h3>投資表現</h3><div id="sum"></div>${fx(['xirr','mdd','cagr','vol','sharpe','sortino','beta','expret'])}</section>
+ <section class="sheet">${lead('倉位紀律','把芒格說的「行為」變成數字規則：先想清楚最多虧多少，再決定放多少。')}${form('disc',[{k:'dd',l:'假設跌幅 %'},{k:'cap',l:'我的規則：單一投資最多佔投資總額 %'}])}<div class="assume"><span class="lbl">凱利倉位（由你估計）</span>${form('disc',[{k:'p',l:'勝率 %'},{k:'win',l:'平均每次贏多少'},{k:'loss',l:'平均每次輸多少'},{k:'frac',l:'只用凱利的幾成 %'}])}</div><div id="sum2"></div>${fx(['lossasym','kelly','mos','expect'])}</section>`,
+ sum2:()=>{const o=get('disc');const dd=N(o.dd)/100,p=N(o.p)/100,w=N(o.win),l=N(o.loss),fr=N(o.frac)/100,cap=N(o.cap)/100;
+  const back=ok(dd)&&dd>0&&dd<1?1/(1-dd)-1:NaN;const b=w>0&&l>0?w/l:NaN;const k=ok(p)&&ok(b)?p-(1-p)/b:NaN;
+  const s=investSummary();const big=s.total>0?s.list.filter(x=>ok(x.value)).reduce((a,x)=>x.value>a.value?x:a,{value:-1}):null;const share=big&&big.value>0?big.value/s.total:NaN;
+  return `<div class="tiles">${kv('跌了之後，回本要漲',pct(back,0),ok(back)?(back>=1?'bad':'warn'):'',ok(dd)?'假設跌 '+pct(dd,0):'先填假設跌幅')}${kv('凱利建議比例',ok(k)?(k<=0?'0%':pct(k,1)):'–',ok(k)?(k<=0?'bad':''):'',ok(k)&&k<=0?'沒有優勢，不該參與':'賠率 '+(ok(b)?num(b,2):'–'))}${kv('打折後的倉位',ok(k)&&ok(fr)?pct(Math.max(0,k)*fr,1):'–','','只用 '+(ok(fr)?pct(fr,0):'–')+' 的凱利')}${kv('目前最大的一筆投資',ok(share)?pct(share,0):'–',ok(share)&&ok(cap)?(share>cap?'bad':'ok'):'',big&&big.name?esc(big.name)+(ok(cap)?'；你的上限 '+pct(cap,0):''):'先記錄投資現值')}</div><p class="hint">凱利公式的勝率和賠率是你自己的估計，估高了就會押太多。這裡只做紀律提醒，不構成投資建議。</p>`},
+ sum:()=>{const s=investSummary();if(!s.list.length)return '<p class="empty">還沒有投資記錄。</p>';
+  return `<div class="tbl-wrap"><table class="tbl read"><thead><tr><th>投資</th><th>累計投入</th><th>累計取回</th><th>最新現值</th><th>盈虧</th><th>年化回報 XIRR</th><th>最大回撤</th></tr></thead><tbody>${s.list.map(o=>`<tr><td>${esc(o.name)}</td><td>${money(o.inv)}</td><td>${money(o.out)}</td><td>${money(o.value)}</td><td>${money(o.pnl)}</td><td>${pct(o.irr)}</td><td>${ok(o.mdd)?pct(o.mdd):'記錄兩次以上現值'}</td></tr>`).join('')}<tr><td><b>合計</b></td><td></td><td></td><td><b>${money(s.total)}</b></td><td></td><td><b>${pct(s.irr)}</b></td><td></td></tr></tbody></table></div><p class="hint">最大回撤用你記錄的現值計算，未扣除期間的投入和取回，只作參考。</p>`}},
+{id:'firms',name:'看公司',html:()=>`<section class="sheet">${lead('看懂一家公司','只問五個問題：賺不賺錢、賺的是不是真錢、會不會倒、優勢能否持續、現在貴不貴。每家公司每年記一行，從財報抄數字。')}<datalist id="dl-firm">${[...new Set(get('firms').map(r=>r.name).filter(Boolean))].map(n=>`<option>${esc(n)}</option>`).join('')}</datalist>${table('firms')}</section><section class="sheet"><h3>護城河：按年份看趨勢</h3><div id="sum"></div>${fx(['gm','roe','roic','ccr','fcf','debtratio','icov','fcfy','mos','moat'])}</section>`,
+ sum:()=>{const by={};get('firms').forEach(r=>{if(r.name&&ok(N(r.yr)))(by[r.name]=by[r.name]||[]).push(r)});const ns=Object.keys(by);if(!ns.length)return '<p class="hint">同一家公司記錄兩年以上，這裡就會排出趨勢。</p>';
+  return ns.map(n=>{const rs=by[n].sort((a,b)=>N(a.yr)-N(b.yr));return `<h3>${esc(n)}</h3><div class="tbl-wrap"><table class="tbl read"><thead><tr><th>年度</th><th>毛利率</th><th>ROE</th><th>現金轉換率</th><th>負債比率</th></tr></thead><tbody>${rs.map(r=>`<tr><td>${r.yr}</td><td>${rat(r.gp,r.rev,1)}</td><td>${rat(r.ni,r.eq,1)}</td><td>${N(r.ni)>0&&ok(N(r.ocf))?num(N(r.ocf)/N(r.ni),2):'–'}</td><td>${rat(r.tl,r.ta,0)}</td></tr>`).join('')}</tbody></table></div>`}).join('')+'<p class="hint">一年好看可能是運氣；連續很多年都穩定，才是能持續的優勢。</p>'}},
+{id:'trades',name:'槓桿交易',html:()=>`<section class="sheet">${lead('槓桿交易記錄','期權、融資、期貨、外匯等，每做一筆記一行。賣出期權、融資和期貨的虧損可以超過本金，會用紅色標出。這裡只做記錄和計算，不構成任何交易建議。')}${table('trades')}</section><section class="sheet"><h3>交易統計</h3><div id="sum"></div>${fx(['lev','winrate','expect','mdd'])}</section>`,
+ sum:()=>{const t=get('trades').filter(r=>ok(N(r.pnl)));if(!t.length)return '<p class="empty">還沒有填了盈虧的交易。</p>';
+  const w=t.filter(r=>N(r.pnl)>0),l=t.filter(r=>N(r.pnl)<0);const wr=w.length/t.length;
+  const aw=w.length?w.reduce((s,r)=>s+N(r.pnl),0)/w.length:0,al=l.length?-l.reduce((s,r)=>s+N(r.pnl),0)/l.length:0;
+  const ex=wr*aw-(1-wr)*al;const tot=t.reduce((s,r)=>s+N(r.pnl),0),cap=t.reduce((s,r)=>s+(N(r.cap)||0),0);
+  let cum=0,pk=0,mdd=0;t.slice().sort((a,b)=>a.d<b.d?-1:1).forEach(r=>{cum+=N(r.pnl);pk=Math.max(pk,cum);mdd=Math.min(mdd,cum-pk)});
+  const risky=get('trades').filter(r=>r.over==='是'||r.kind==='賣出期權').length;
+  return `<div class="tiles">${kv('交易筆數',t.length)}${kv('勝率',pct(wr,0))}${kv('盈虧比',al>0?num(aw/al,2):'–','','平均賺 ÷ 平均虧')}${kv('每筆期望值',money(ex),ex>=0?'ok':'bad','負數代表長期會虧')}${kv('總盈虧',money(tot),tot>=0?'ok':'bad')}${kv('總投入回報',cap>0?pct(tot/cap):'–')}${kv('累積盈虧最大回撤',money(mdd),mdd<0?'warn':'')}${kv('虧損可超過本金的交易',risky+' 筆',risky?'bad':'ok')}</div>`}},
+{id:'biz',name:'創業',html:()=>`<section class="sheet">${lead('創業項目記錄','每個項目一行，可以存很多個並排比較。毛利率填百分比，例如 40。')}${table('biz')}</section><section class="sheet"><h3>創業總結</h3><div id="sum"></div>${fx(['bep','netp','payback','runway','hourly','succ'])}</section>`,
+ sum:()=>{const b=get('biz');if(!b.length)return '<p class="empty">還沒有項目。</p>';const ended=b.filter(r=>r.status&&r.status.indexOf('已結束')===0),wins=ended.filter(r=>r.status==='已結束－成功');
+  const inv=b.reduce((s,r)=>s+(N(r.start)||0),0),pf=b.reduce((s,r)=>s+(N(r.profit)||0),0);
+  return `<div class="tiles">${kv('項目數',b.length)}${kv('成功率',ended.length?pct(wins.length/ended.length,0):'–','',ended.length+' 個已結束')}${kv('累計啟動資金',money(inv))}${kv('實際累計利潤',money(pf),pf>=0?'ok':'bad')}${kv('整體投入回報',inv>0?pct(pf/inv):'–')}</div>`}},
+{id:'compare',name:'機會比較',html:()=>`<section class="sheet">${lead('機會橫向比較','把幾個選擇放在一起：產品、存款、投資或項目。回報和跌幅都由你按資料填寫。')}<div class="fields"><label class="f" for="cmpYears">比較年數<input type="number" id="cmpYears" data-s="cmpYears" value="${esc(S.cmpYears)}" inputmode="decimal"></label></div>${table('compare')}</section><section class="sheet"><h3>比較結果</h3><div id="sum"></div>${fx(['fv','oppcost','retdd','realrate'])}</section>`,
+ sum:()=>{const c=get('compare').filter(r=>ok(cmpFV(r)));if(!c.length)return '<p class="hint">填比較年數、投入金額和預期年回報，就會算出期末值和機會成本。</p>';
+  const best=c.reduce((a,r)=>cmpFV(r)>cmpFV(a)?r:a);const safest=c.reduce((a,r)=>(N(r.safe)||0)>(N(a.safe)||0)?r:a);
+  return `<div class="tiles">${kv('期末值最高',esc(best.name||'未命名'),'',money(cmpFV(best)))}${kv('安全性最高',esc(safest.name||'未命名'),'',ok(N(safest.safe))?'安全性 '+safest.safe:'')}</div><p class="hint">回報最高的不一定最適合。同時看安全性、流動性和最大可能跌幅，再決定。</p>`}},
+{id:'budget',name:'未來預算',html:()=>`<section class="sheet">${lead('生活與養老預算','留空的格子會自動用你的記錄：每月支出用最近 6 個月平均，可投資資產用投資現值。')}${form('budget',[{k:'age',l:'現在幾歲'},{k:'ret',l:'想幾歲退休'},{k:'life',l:'預計壽命'},{k:'exp',l:'每月生活支出',ph:'留空＝用記錄平均'},{k:'assets',l:'可投資資產',ph:'留空＝用投資現值'}])}
+ <div class="assume"><span class="lbl">假設（由你填寫）</span>${form('budget',[{k:'g',l:'生活通脹 %'},{k:'r',l:'退休後資金回報 %'},{k:'w',l:'每年可提取比例 %'}])}</div><div id="sum"></div>${fx(['fire','futexp','gapv','defer','livgap'])}</section>
+ <section class="sheet"><h3>教育金</h3>${form('budget',[{k:'eAge',l:'孩子現在幾歲'},{k:'eStart',l:'幾歲入讀大學'},{k:'eYears',l:'讀幾年'},{k:'eCost',l:'今年每年學費＋生活費'},{k:'eHave',l:'已準備的教育金'}])}
+ <div class="assume"><span class="lbl">假設（由你填寫）</span>${form('budget',[{k:'eInf',l:'學費每年上漲 %'},{k:'eRet',l:'儲蓄每年回報 %'}])}</div><div id="sum2"></div>${fx(['edu','pmt'])}</section>`,
+ sum:()=>{const b=get('budget'),rc=recent(),inv=investSummary();
+  const me=ok(N(b.exp))?N(b.exp):rc.exp,A=ok(N(b.assets))?N(b.assets):inv.total;
+  const age=N(b.age),ra=N(b.ret),life=N(b.life),g=N(b.g)/100,r=N(b.r)/100,w=N(b.w)/100;
+  const yr=me*12,d=ra-age,n=life-ra;
+  const fire=w>0&&ok(yr)?yr/w:NaN,fireRet=ok(fire)&&ok(g)&&ok(d)?fire*Math.pow(1+g,Math.max(0,d)):NaN;
+  let pvRet=NaN,pvToday=NaN;
+  if(ok(yr)&&ok(g)&&ok(r)&&d>=0&&n>0){const P1=yr*Math.pow(1+g,d);pvRet=Math.abs(r-g)<1e-9?P1*n/(1+r):P1*(1-Math.pow((1+g)/(1+r),n))/(r-g);pvToday=pvRet/Math.pow(1+r,d)}
+  return `<div class="tiles">${kv('每月支出（計算用）',money(me),'',ok(N(b.exp))?'你填的':'記錄平均')}${kv('財務自由數字（今天的錢）',money(fire),'','年支出 ÷ 提取比例')}${kv('財務自由數字（退休那年的錢）',money(fireRet))}${kv('完成度',ok(fire)&&fire>0?pct(A/fire,0):'–',ok(fire)?cls(A/fire,1,0.5):'',money(A))}${kv('退休時要有的資金',money(pvRet),'','按通脹逐年增加，領到預計壽命')}${kv('折回今天要準備',money(pvToday))}${kv('退休後要生活',ok(n)?n+' 年':'–','',n>30?'超過 30 年，提取比例宜保守':'')}</div>`},
+ sum2:()=>{const b=get('budget');const age=N(b.eAge),st=N(b.eStart),yrs=N(b.eYears),cost=N(b.eCost),have=N(b.eHave),gi=N(b.eInf)/100,er=N(b.eRet)/100;
+  let n=st-age,total=NaN,hv=NaN,gap=NaN,mon=NaN;
+  if(ok(n)&&ok(yrs)&&ok(cost)&&ok(gi)){n=Math.max(0,n);total=0;for(let k=0;k<yrs;k++)total+=cost*Math.pow(1+gi,n+k);
+   if(ok(have)&&ok(er)){hv=have*Math.pow(1+er,n);gap=Math.max(0,total-hv);mon=n>0?pmtCalc(er/12,n*12,0,gap):NaN}}
+  return `<div class="tiles">${kv('入學時需要總額',money(total))}${kv('已準備到時的價值',money(hv))}${kv('缺口',money(gap),ok(gap)?(gap>0?'bad':'ok'):'')}${kv('從現在起每月需存',ok(n)&&n<=0?'已到入學年齡':money(mon))}</div>`}},
+{id:'goal',name:'目標反推',html:()=>`<section class="sheet">${lead('財富目標反推','先定目標，系統從四個槓桿倒推：收入、被動收入、回報率、時間。留空的格子會用你的記錄。')}
+ ${form('goal',[{k:'type',l:'目標類型',t:'sel',o:[['asset','想擁有多少資產'],['passive','想每月有多少被動收入']]},{k:'target',l:'目標資產'},{k:'pMonth',l:'每月被動收入目標'},{k:'pYield',l:'被動收入年收益率 %'}])}
+ ${form('goal',[{k:'pv',l:'現有可投資資產',ph:'留空＝用投資現值'},{k:'pmt',l:'每月可投入',ph:'留空＝用平均結餘'},{k:'r',l:'預期年回報 %'},{k:'years',l:'想在幾年內達到'}])}
+ <div id="sum"></div></section>
+ <section class="sheet"><h3>組合表：每月投入 × 年回報 → 要多少年</h3>${form('goal',[{k:'rates',l:'要比較的年回報（用逗號分隔）',t:'text'},{k:'pmts',l:'要比較的每月投入（逗號分隔，留空＝現在的 0.5 至 3 倍）',t:'text'}])}<div id="sum2"></div>${fx(['nper','pmt','rate','fv','fire'])}</section>`,
+ sum:()=>{const g=goalInputs();if(!ok(g.target))return '<p class="hint">先填目標資產，或選「每月被動收入」並填目標和收益率。</p>';
+  if(ok(g.pv)&&g.pv>=g.target)return `<div class="tiles">${kv('目標（換算成資產）',money(g.target))}${kv('現有資產',money(g.pv),'ok','已經達到目標，可以把目標定高一點')}</div>`;
+  const rm=g.r/12;const n0=ok(g.r)&&ok(g.pmt)&&ok(g.pv)?nperCalc(rm,g.pmt,g.pv,g.target):NaN;
+  const reqP=ok(g.r)&&g.years>0?pmtCalc(rm,g.years*12,g.pv,g.target):NaN;
+  const reqR=g.years>0&&ok(g.pmt)?rateCalc(g.years*12,g.pmt,g.pv,g.target):NaN;
+  return `<div class="tiles">${kv('目標（換算成資產）',money(g.target),'',g.type==='passive'?'每月被動收入 × 12 ÷ 收益率':'')}${kv('現有資產',money(g.pv))}${kv('每月投入',money(g.pmt))}
+  ${kv('① 照現狀要多少時間',months(ok(n0)||n0===Infinity?n0:NaN),n0===Infinity?'bad':'')}
+  ${kv('② 年期不變，每月要投入',money(reqP),'',ok(reqP)&&ok(g.pmt)?'比現在多 '+money(Math.max(0,reqP-g.pmt)):'')}
+  ${kv('③ 收入要增加',ok(reqP)&&ok(g.pmt)?money(Math.max(0,reqP-g.pmt))+'／月':'–','','假設支出不變，多賺的全部存下')}
+  ${kv('④ 年期與投入不變，需要年回報',ok(reqR)?pct(reqR):(g.years>0?'超過 200%，不現實':'–'),ok(reqR)?cls(-reqR,-0.06,-0.12):'bad','再去「機會比較」看哪些選擇做得到')}</div>`},
+ sum2:()=>{const g=goalInputs();if(!ok(g.target)||!ok(g.pv))return '<p class="hint">填好目標和現有資產後，這裡會顯示組合表。</p>';
+  const rates=String(get('goal').rates||'').split(/[,，\s]+/).map(N).filter(ok);
+  let pm=String(get('goal').pmts||'').split(/[,，\s]+/).map(N).filter(ok);
+  if(!pm.length&&g.pmt>0)pm=[0.5,1,1.5,2,3].map(x=>Math.round(g.pmt*x));
+  if(!rates.length||!pm.length)return '<p class="hint">填要比較的年回報和每月投入。</p>';
+  return `<div class="tbl-wrap"><table class="tbl read"><thead><tr><th>每月投入 ＼ 年回報</th>${rates.map(r=>`<th>${r}%</th>`).join('')}</tr></thead><tbody>${pm.map(p=>`<tr><td><b>${money(p)}</b></td>${rates.map(r=>{const n=nperCalc(r/1200,p,g.pv,g.target);return `<td>${n===Infinity?'<span class="tag bad">到不了</span>':months(n)}</td>`}).join('')}</tr>`).join('')}</tbody></table></div><p class="hint">這是假設性計算，回報率不是保證。</p>`}},
+{id:'levsim',name:'槓桿模擬',html:()=>`<section class="sheet">${lead('投資和項目槓桿','借錢投資或做項目，看樂觀、一般、悲觀三種情況。槓桿會同時放大賺和虧，一定要看悲觀那一欄。')}
+ ${form('levsim',[{k:'E',l:'自有資金'},{k:'D',l:'借款金額'},{k:'i',l:'借款年利率 %'}])}
+ <div class="assume"><span class="lbl">情境假設（由你填寫）</span>${form('levsim',[{k:'rO',l:'樂觀年回報 %'},{k:'rB',l:'一般年回報 %'},{k:'rP',l:'悲觀年回報 %'}])}</div><div id="sum"></div>${fx(['lev','levret','breakeven','wipe'])}</section>
+ <section class="sheet"><h3>保險槓桿</h3><p class="muted">用計劃書上的真實數字填寫。</p>${table('ins')}${fx(['inslev','per1m','ciyears','cigap','lifegap','medgap'])}</section>
+ <section class="sheet"><h3>槓桿總覽</h3><div id="sum2"></div></section>`,
+ sum:()=>{const o=get('levsim');const E=N(o.E),D=N(o.D)||0,i=(N(o.i)||0)/100;if(!(E>0))return '<p class="hint">先填自有資金。</p>';
+  const T=E+D,lv=T/E;const sc=[['樂觀',N(o.rO)],['一般',N(o.rB)],['悲觀',N(o.rP)]];
+  return `<div class="tiles">${kv('槓桿倍數',num(lv,2)+' 倍')}${kv('總投入',money(T))}${kv('保本回報',pct(D*i/T,2),'','低於這個就開始虧')}${kv('本金虧光的回報',pct((D*i-E)/T,1),'bad','跌到這裡自有資金歸零')}</div>
+  <div class="tbl-wrap"><table class="tbl read"><thead><tr><th>情境</th><th>資產年回報</th><th>不借錢時自有回報</th><th>借錢後自有回報</th><th>借錢後賺或虧</th></tr></thead><tbody>${sc.map(([n,r])=>{if(!ok(r))return `<tr><td>${n}</td><td colspan="4" class="muted">未填</td></tr>`;const x=r/100,er=(T*x-D*i)/E;return `<tr><td>${n}</td><td>${pct(x)}</td><td>${pct(x)}</td><td><b>${pct(er)}</b>${er<=-1?' <span class="tag bad">本金虧光</span>':''}</td><td>${money(T*x-D*i)}</td></tr>`}).join('')}</tbody></table></div>`},
+ sum2:()=>{const rows=[];const o=get('levsim');const E=N(o.E),D=N(o.D)||0,i=(N(o.i)||0)/100;
+  if(E>0){const T=E+D,x=N(o.rP);rows.push(['投資和項目槓桿',num(T/E,2)+' 倍',ok(x)?'悲觀情況自有回報 '+pct((T*x/100-D*i)/E):'未填悲觀情境','看借款期限']);}
+  get('ins').forEach(r=>{const p=N(r.prem),y=N(r.years),s=N(r.sum);if(!(p>0)||!(s>0))return;rows.push([esc(r.type+'：'+(r.name||'未命名')),r.type==='醫療'?num(s/p,1)+' 倍（每年）':'第一年 '+num(s/p,1)+' 倍'+(y>0?'；繳完 '+num(s/(p*y),1)+' 倍':''),'沒有理賠時，保費當作保障成本','長期合約，提早退保有損失'])});
+  const t=get('trades').filter(r=>N(r.cap)>0&&N(r.notional)>0);
+  if(t.length){const avg=t.reduce((s,r)=>s+N(r.notional)/N(r.cap),0)/t.length;const risky=t.filter(r=>r.over==='是'||r.kind==='賣出期權').length;rows.push(['槓桿交易（平均）',num(avg,1)+' 倍',risky?`<span class="tag bad">${risky} 筆虧損可超過本金</span>`:'虧損有上限','視乎合約到期日'])}
+  if(!rows.length)return '<p class="hint">填了上面的投資槓桿、保險，或在「槓桿交易」記錄後，這裡會並排比較。</p>';
+  return `<div class="tbl-wrap"><table class="tbl read"><thead><tr><th>槓桿來源</th><th>放大倍數</th><th>最差情況</th><th>錢被鎖住多久</th></tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`}},
+{id:'lib',name:'公式庫',html:()=>{const cats=[...new Set(Object.values(F).map(f=>f.c))];return `<section class="sheet">${lead('公式庫','從你的 Notion 和以前的對話整理出來，每條都附 Excel 寫法和出處。查不到出處的「實證數據」沒有收錄。')}</section>${cats.map(c=>`<section class="sheet"><h3>${c}</h3><div class="lib">${Object.keys(F).filter(k=>F[k].c===c).map(fcard).join('')}</div></section>`).join('')}`},sum:()=>''},
+{id:'check',name:'客戶體檢',html:()=>checkHtml(),sum:()=>'',after:()=>checkAfter()}
+];
+function goalInputs(){const o=get('goal'),rc=recent(),inv=investSummary();
+  const type=o.type||'asset';let target=N(o.target);
+  if(type==='passive'){const pm=N(o.pMonth),y=N(o.pYield)/100;target=pm>0&&y>0?pm*12/y:NaN}
+  const pv=ok(N(o.pv))?N(o.pv):inv.total;const pmt=ok(N(o.pmt))?N(o.pmt):(rc.n?Math.max(0,rc.inc-rc.exp):NaN);
+  return {type,target,pv,pmt,r:N(o.r)/100,years:N(o.years)};
+}
+function chart(){
+  const m=monthAgg();const ks=Object.keys(m).sort().slice(-12);if(!ks.length)return '';
+  const W=640,H=220,L=56,B=28,T=10,max=Math.max(1,...ks.map(k=>Math.max(m[k].inc,m[k].exp)));
+  const step=(W-L-10)/ks.length,bw=Math.min(18,step/3);const y=v=>T+(H-T-B)*(1-v/max);
+  const ticks=[0,0.5,1].map(t=>max*t);
+  return `<div class="chart"><div class="legend"><span><i style="background:var(--accent)"></i>收入</span><span><i style="background:var(--gold)"></i>支出</span></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="最近十二個月收入與支出">
+  ${ticks.map(t=>`<line x1="${L}" x2="${W-10}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)"/><text x="${L-6}" y="${y(t)+4}" text-anchor="end" font-size="10" fill="var(--muted)">${Math.round(t).toLocaleString('zh-Hant')}</text>`).join('')}
+  ${ks.map((k,i)=>{const x=L+i*step+step/2;return `<rect x="${x-bw-1}" y="${y(m[k].inc)}" width="${bw}" height="${H-B-y(m[k].inc)}" fill="var(--accent)" rx="2"/><rect x="${x+1}" y="${y(m[k].exp)}" width="${bw}" height="${H-B-y(m[k].exp)}" fill="var(--gold)" rx="2"/><text x="${x}" y="${H-10}" text-anchor="middle" font-size="10" fill="var(--muted)">${k.slice(2)}</text>`}).join('')}</svg></div>`;
+}
+
+/* ================= 客戶體檢 ================= */
+const MODS=[
+ {id:'edu',name:'教育',tag:'目標池',q:'孩子讀大學的錢，已經準備好了嗎？'},
+ {id:'life',name:'生活',tag:'目標池',q:'如果明天開始不工作，現在的錢能讓家裡生活多久？'},
+ {id:'med',name:'醫療',tag:'防護牆',q:'一場大病的醫療費，是保險付，還是存款付？'},
+ {id:'ci',name:'重疾',tag:'防護牆',q:'生病不能工作的那幾年，誰來負責家用？'},
+ {id:'ins',name:'人壽',tag:'防護牆',q:'如果家裡突然少了你的收入，房貸和孩子的開支，誰來承擔？'},
+ {id:'leg',name:'傳承',tag:'傳水管',q:'如果資產今天要交給孩子，家人知道你的安排和手續嗎？'}];
+const CH=[['ok','已準備好'],['unsure','不確定'],['no','沒有']];const LB={ok:'已準備好',unsure:'不確定',no:'沒有'};
+const LEGQ=['已經立好遺囑','重要資產有指定受益人','股權有繼承或轉讓安排','跨境資產（香港／內地）手續已了解','資產不需凍結也能馬上動用一部分','家人知道你的安排'];
+let stage='s1';
+function ck(){return get('check')}
+function cv(k){const v=N(ck().vals[k]);return v}
+function checkHtml(){
+ const c=ck();
+ const st=`<div class="sub" role="tablist">${[['s1','第一階段・第二次面談'],['s2','第二階段・第三次面談'],['s3','第三階段・年度複檢']].map(([k,n])=>`<button type="button" data-stage="${k}" aria-current="${stage===k}">${n}</button>`).join('')}</div>`;
+ const ci=(k,l)=>`<label class="f" for="ck-${k}">${l}<input type="number" id="ck-${k}" data-ck2="${k}" value="${esc(c.vals[k]==null?'':c.vals[k])}" inputmode="decimal" step="any"></label>`;
+ if(stage==='s1')return `<section class="sheet">${lead('客戶體檢','給客戶面談用。第二次面談只喚醒意識，不做計算。')}${st}</section>
+ <section class="sheet"><h3>家庭的財富水系統</h3><div class="svgbox">${waterSvg()}</div></section>
+ <section class="sheet"><h3>六個問題</h3><p class="muted">請客戶自己按。不確定，也是一種答案。</p><div class="cards">${MODS.map(m=>`<div class="card"><span class="ctag${m.tag==='防護牆'?' wall':''}">${m.tag}・${m.name}</span><p>${m.q}</p><div class="choices">${CH.map(o=>`<button type="button" data-ans="${m.id}" data-v="${o[0]}" aria-pressed="${c.answers[m.id]===o[0]}">${o[1]}</button>`).join('')}</div></div>`).join('')}</div></section>
+ <section class="sheet"><div class="mhead"><h3>健康圖</h3><span class="muted">點選最想先弄清楚的 1–2 項</span></div><div class="grid6">${MODS.map(m=>{const a=c.answers[m.id],p=c.selected.indexOf(m.id)>-1;return `<button type="button" class="tile${a?' '+a:''}" data-pick="${m.id}" aria-pressed="${p}"><b>${m.name}</b><span>${a?LB[a]:'未回答'}</span>${p?'<span class="pick">已選，下次詳細計算</span>':''}</button>`}).join('')}</div><button type="button" class="btn" data-stage="s2">帶著選擇進入第三次面談</button></section>`;
+ if(stage==='s2'){const show=id=>c.selected.indexOf(id)>-1||c['show_'+id];
+  return `<section class="sheet">${lead('客戶體檢','第三次面談：只計算客戶選的項目。')}${st}</section>
+ <section class="sheet"><h3>財務地基</h3>${'<div class="fields">'+ci('inc','每月收入')+ci('exp','每月支出')+ci('cash','現金存款')+ci('inv','投資資產（不含自住房）')+ci('prop','房產及其他資產')+ci('debt','負債總額')+'</div>'}<div id="ck-base"></div></section>
+ <section class="sheet"><h3>要計算的項目</h3><div class="row">${MODS.map(m=>`<button type="button" class="chip" data-show="${m.id}" aria-pressed="${!!show(m.id)}">${m.name}</button>`).join('')}</div></section>
+ ${show('edu')?`<section class="sheet"><div class="mhead"><h3>教育金：還差多少？</h3><span class="light" id="l-edu"></span></div><div class="fields">${ci('e_age','孩子現在幾歲')+ci('e_start','幾歲入讀大學')+ci('e_years','讀幾年')+ci('e_cost','今年每年學費＋生活費')+ci('e_have','已準備的教育金')}</div><div class="assume"><span class="lbl">假設（由你填寫）</span><div class="fields">${ci('e_inf','學費每年上漲 %')+ci('e_ret','儲蓄每年回報 %')}</div></div><div id="ck-edu"></div></section>`:''}
+ ${show('life')?`<section class="sheet"><div class="mhead"><h3>生活基金：離財務自由還有多遠？</h3><span class="light" id="l-life"></span></div><div class="fields">${ci('r_age','現在幾歲')+ci('r_ret','想幾歲退休')+ci('r_life','預計壽命')}</div><div class="assume"><span class="lbl">假設（由你填寫）</span><div class="fields">${ci('r_inf','生活通脹每年 %')+ci('r_wr','每年可提取比例 %')}</div></div><div id="ck-life"></div></section>`:''}
+ ${show('med')?`<section class="sheet"><div class="mhead"><h3>醫療：一場大病，誰來付？</h3><span class="light" id="l-med"></span></div><div class="row"><span class="muted">有沒有終身醫療保障</span><div class="seg">${[['y','有'],['n','沒有']].map(([v,t])=>`<button type="button" data-medhas="${v}" aria-pressed="${c.medHas===v}">${t}</button>`).join('')}</div></div><div class="fields">${ci('md_have','現有每年保障額')+ci('md_want','希望的每年保障額')}</div><div id="ck-med"></div></section>`:''}
+ ${show('ci')?`<section class="sheet"><div class="mhead"><h3>重疾：收入停了，能撐幾年？</h3><span class="light" id="l-ci"></span></div><div class="fields">${ci('c_have','現有重疾保額')}</div><div class="assume"><span class="lbl">假設（由你填寫）</span><div class="fields">${ci('c_years','希望補償幾年收入')}</div></div><div id="ck-ci"></div></section>`:''}
+ ${show('ins')?`<section class="sheet"><div class="mhead"><h3>人壽：少了你的收入，家裡怎麼辦？</h3><span class="light" id="l-ins"></span></div><div class="fields">${ci('i_have','現有壽險保額')}</div><div class="assume"><span class="lbl">假設（由你填寫）</span><div class="fields">${ci('i_years','需要照顧家庭幾年')}</div></div><div id="ck-ins"></div></section>`:''}
+ ${show('leg')?`<section class="sheet"><div class="mhead"><h3>傳承：資產能順利交到下一代手上嗎？</h3><span class="light" id="l-leg"></span></div><p class="muted">不做計算，逐項確認。</p><div>${LEGQ.map((t,i)=>`<div class="checkrow"><span>${t}</span><div class="yn">${[['y','是'],['n','否']].map(([v,l])=>`<button type="button" data-leg="${i}" data-v="${v}" aria-pressed="${(c.leg[i]===true&&v==='y')||(c.leg[i]===false&&v==='n')}">${l}</button>`).join('')}</div></div>`).join('')}</div></section>`:''}`;}
+ const recs=get('checkRecords');
+ return `<section class="sheet">${lead('客戶體檢','年度複檢：保存這次的健康圖，明年拿來對比。')}${st}</section>
+ <section class="sheet"><h3>保存這次的健康圖</h3><p class="muted">建議用客戶代號，不要填全名或證件資料。</p><div class="fields"><label class="f" for="ck-code">客戶代號<input type="text" id="ck-code" placeholder="例如：陳先生A"></label></div><button type="button" class="btn" id="ck-save">保存本次結果</button><p class="muted" id="ck-msg" aria-live="polite"></p></section>
+ <section class="sheet"><h3>和去年對比</h3>${recs.length?recs.map((r,i)=>`<div class="row" style="justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:8px 12px"><span><b>${esc(r.code)}</b> <span class="muted">${r.date}</span></span><button type="button" class="btn small ghost" data-cmp="${i}">和現在對比</button></div>`).join(''):'<p class="hint">還沒有保存的記錄。</p>'}<div id="ck-cmp" class="tiles"></div></section>`;
+}
+function waterSvg(){return `<svg viewBox="0 0 360 230" role="img" aria-label="財富水系統示意圖"><g font-family="Noto Sans TC, PingFang TC, sans-serif" font-size="11" fill="var(--ink)">
+<rect x="18" y="18" width="70" height="12" rx="3" fill="var(--accent)"/><rect x="74" y="18" width="12" height="28" rx="3" fill="var(--accent)"/><text x="18" y="12" font-weight="700">收入・水龍頭</text>
+<line x1="80" y1="48" x2="80" y2="104" stroke="var(--accent)" stroke-width="5" stroke-dasharray="6 5"/>
+<rect x="36" y="74" width="196" height="122" rx="10" fill="none" stroke="var(--gold)" stroke-width="4" stroke-dasharray="10 6"/><text x="106" y="68" fill="var(--gold)" font-weight="700">保險・防護牆（醫療・重疾・人壽）</text>
+<rect x="50" y="86" width="168" height="98" rx="6" fill="var(--surface)" stroke="var(--ink)" stroke-width="2"/><rect x="52" y="118" width="164" height="64" rx="4" fill="var(--accent-soft)"/>
+<text x="98" y="155" font-weight="700" font-size="13">資產・水池</text><text x="78" y="172" fill="var(--muted)">教育金・生活基金</text>
+<line x1="96" y1="184" x2="96" y2="214" stroke="var(--bad)" stroke-width="3" stroke-dasharray="3 4"/><circle cx="96" cy="220" r="4" fill="var(--bad)"/><text x="106" y="222" fill="var(--bad)" font-weight="700">負債・漏洞</text>
+<rect x="218" y="160" width="34" height="8" fill="var(--ink)"/><line x1="252" y1="168" x2="252" y2="196" stroke="var(--accent)" stroke-width="4" stroke-dasharray="4 4"/><text x="260" y="190" font-weight="700">支出・出水口</text>
+<polyline points="218,104 286,104 286,128" fill="none" stroke="var(--accent)" stroke-width="7" stroke-linejoin="round"/><rect x="262" y="128" width="62" height="34" rx="5" fill="var(--accent-soft)" stroke="var(--ink)" stroke-width="2"/>
+<text x="254" y="96" font-weight="700">傳承・傳水管</text><text x="275" y="150">下一代</text></g></svg>`}
+function setL(id,s){const el=$(id);if(!el)return;el.className='light'+(s?' '+s:'');el.textContent=s?LB[s]:'待填寫'}
+function rl(h,n){if(!ok(h)||!ok(n)||n<=0)return '';const r=h/n;return r>=1?'ok':(r>=0.5?'unsure':'no')}
+function checkAfter(){
+ if(stage!=='s2')return;const c=ck();
+ const inc=cv('inc'),exp=cv('exp'),cash=cv('cash'),debt=cv('debt');
+ const b=$('ck-base');if(b)b.innerHTML=`<div class="tiles">${kv('每月結餘',money(inc-exp))}${kv('淨資產',money((cash||0)+(cv('inv')||0)+(cv('prop')||0)-(debt||0)))}${kv('應急金夠幾個月',ok(cash/exp)?num(cash/exp,1)+' 個月':'–',cls(cash/exp,12,6),'目標 12 個月')}</div>`;
+ if($('ck-edu')){const age=cv('e_age'),st=cv('e_start'),y=cv('e_years'),co=cv('e_cost'),hv=cv('e_have'),gi=cv('e_inf')/100,er=cv('e_ret')/100;let n=st-age,t=NaN,h=NaN,g=NaN,mo=NaN;
+  if(ok(n)&&ok(y)&&ok(co)&&ok(gi)){n=Math.max(0,n);t=0;for(let k=0;k<y;k++)t+=co*Math.pow(1+gi,n+k);if(ok(hv)&&ok(er)){h=hv*Math.pow(1+er,n);g=Math.max(0,t-h);mo=n>0?pmtCalc(er/12,n*12,0,g):NaN}}
+  $('ck-edu').innerHTML=`<div class="tiles">${kv('讀大學時需要總額',money(t))}${kv('已準備到時的價值',money(h))}${kv('缺口',money(g))}${kv('從現在起每月需存',money(mo))}</div>`;setL('l-edu',rl(h,t))}
+ if($('ck-life')){const a=cv('r_age'),r=cv('r_ret'),l=cv('r_life'),g=cv('r_inf')/100,w=cv('r_wr')/100,inv=cv('inv');const ft=w>0&&ok(exp)?exp*12/w:NaN,ff=ok(ft)&&ok(g)&&ok(r-a)?ft*Math.pow(1+g,Math.max(0,r-a)):NaN,p=inv/ft;
+  $('ck-life').innerHTML=`<div class="tiles">${kv('自由數字（今天的錢）',money(ft))}${kv('自由數字（退休那年的錢）',money(ff))}${kv('目前完成',ok(p)?pct(p,0):'–')}${kv('退休後要生活',ok(l-r)?(l-r)+' 年':'–')}</div>`;setL('l-life',ok(p)?(p>=1?'ok':(p>=0.5?'unsure':'no')):'')}
+ if($('ck-med')){const h=cv('md_have'),w=cv('md_want');$('ck-med').innerHTML=`<div class="tiles">${kv('保障缺口',ok(w)?money(Math.max(0,w-(h||0))):'–')}</div>`;setL('l-med',c.medHas==='n'?'no':(c.medHas==='y'?rl(h,w):''))}
+ if($('ck-ci')){const h=cv('c_have'),y=cv('c_years'),ai=inc*12,need=ai*y;$('ck-ci').innerHTML=`<div class="tiles">${kv('現在能撐',ok(h)&&ai>0?num(h/ai,1)+' 年':'–')}${kv('需要保額',money(need))}${kv('缺口',ok(need)?money(Math.max(0,need-(h||0))):'–')}</div>`;setL('l-ci',rl(h,need))}
+ if($('ck-ins')){const h=cv('i_have'),y=cv('i_years'),need=(debt||0)+exp*12*y;$('ck-ins').innerHTML=`<div class="tiles">${kv('需要（負債＋家庭開支）',money(need))}${kv('缺口',ok(need)?money(Math.max(0,need-(h||0))):'–')}</div>`;setL('l-ins',rl(h,need))}
+ if($('l-leg')){const d=c.leg.filter(x=>x!==null).length,y=c.leg.filter(x=>x===true).length;setL('l-leg',d<6?'':(y===6?'ok':(y>=3?'unsure':'no')))}
+}
+
+/* ================= 渲染與事件 ================= */
+let tab='home';try{tab=localStorage.getItem('wealthsys_tab')||'home'}catch(e){}
+if(!TABS.some(t=>t.id===tab))tab='home';
+function nav(){$('nav').innerHTML=TABS.map(t=>(t.id==='lib'?'<span class="sep"></span>':'')+`<button type="button" data-tab="${t.id}" aria-current="${t.id===tab}">${t.name}</button>`).join('')}
+function sums(){const t=TABS.find(x=>x.id===tab);const s=$('sum');if(s&&t.sum)s.innerHTML=t.sum();const s2=$('sum2');if(s2&&t.sum2)s2.innerHTML=t.sum2();if(t.after)t.after()}
+function render(){nav();$('cur').value=cur();const t=TABS.find(x=>x.id===tab);$('main').innerHTML=DL+t.html();sums()}
+function update(){recalcCells();sums()}
+
+document.addEventListener('click',e=>{
+ const b=e.target.closest('button');if(!b)return;const d=b.dataset;
+ if(d.tab){tab=d.tab;try{localStorage.setItem('wealthsys_tab',tab)}catch(x){}render();window.scrollTo(0,0);return}
+ if(d.add){get(d.add).unshift(SCHEMA[d.add].add());persist(d.add);render();const f=document.querySelector(`[data-t="${d.add}"][data-i="0"]`);if(f)f.focus();return}
+ if(d.del!==undefined&&d.del){get(d.del).splice(+d.i,1);persist(d.del);render();return}
+ if(d.stage){stage=d.stage;render();return}
+ if(d.ans){ck().answers[d.ans]=d.v;persist('check');render();return}
+ if(d.pick){const s=ck().selected,i=s.indexOf(d.pick);if(i>-1)s.splice(i,1);else{if(s.length>=2)s.shift();s.push(d.pick)}persist('check');render();return}
+ if(d.show){const c=ck(),on=c.selected.indexOf(d.show)>-1||c['show_'+d.show];if(on){c['show_'+d.show]=false;const i=c.selected.indexOf(d.show);if(i>-1)c.selected.splice(i,1)}else c['show_'+d.show]=true;persist('check');render();return}
+ if(d.medhas){ck().medHas=d.medhas;persist('check');render();return}
+ if(d.leg!==undefined){ck().leg[+d.leg]=d.v==='y';persist('check');render();return}
+ if(b.id==='ck-save'){const code=$('ck-code').value.trim();const m=$('ck-msg');if(!code){m.textContent='請先填寫客戶代號。';return}if(!Object.keys(ck().answers).length){m.textContent='第一階段還沒有答案。';return}
+   const dt=new Date();get('checkRecords').unshift({code,date:dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'),answers:Object.assign({},ck().answers)});persist('checkRecords');render();$('ck-msg').textContent='已保存：'+code;return}
+ if(d.cmp!==undefined){const r=get('checkRecords')[+d.cmp];const R={no:0,unsure:1,ok:2};$('ck-cmp').innerHTML=MODS.map(m=>{const a=r.answers[m.id],b2=ck().answers[m.id];let c='',t='沒變化';if(a&&b2&&R[b2]>R[a]){c='ok';t='進步了'}else if(a&&b2&&R[b2]<R[a]){c='bad';t='變差了'}else if(!a||!b2)t='資料不全';return kv(m.name+'：'+(a?LB[a]:'–')+' → '+(b2?LB[b2]:'–'),t,c)}).join('');return}
+ if(b.id==='bk-copy'){const txt=JSON.stringify(S);const msg=$('bk-msg');const fall=()=>{$('bk-text').value=txt;$('bk-text').select();msg.textContent='已放進下面的方框並選取，請手動複製。'};
+   try{navigator.clipboard.writeText(txt).then(()=>{msg.textContent='已複製，可以貼到 Notion 或備忘錄。'},fall)}catch(x){fall()}return}
+ if(b.id==='bk-restore'){const msg=$('bk-msg');try{const o=JSON.parse($('bk-text').value);let n=0;KEYS.forEach(k=>{if(o[k]!==undefined){S[k]=o[k];persist(k);n++}});msg.textContent=n?'已還原。':'內容裡沒有可還原的資料。';if(n)render()}catch(x){msg.textContent='內容格式不對，請貼上完整的備份。'}return}
+});
+function onField(e){
+ const el=e.target;const d=el.dataset;
+ if(d.t){const r=get(d.t)[+d.i];if(!r)return;r[d.k]=el.value;persist(d.t);update();return}
+ if(d.o){get(d.o)[d.k]=el.value;persist(d.o);if(el.tagName==='SELECT')render();else update();return}
+ if(d.s){S[d.s]=el.value;persist(d.s);update();return}
+ if(d.ck2){ck().vals[d.ck2]=el.value;persist('check');checkAfter();return}
+}
+document.addEventListener('input',e=>{if(e.target.tagName!=='SELECT')onField(e)});
+document.addEventListener('change',e=>{if(e.target.id==='cur'){get('settings').cur=e.target.value;persist('settings');render();return}if(e.target.tagName==='SELECT')onField(e)});
+
+render();
+initCloud();
+if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').catch(()=>{})})}
+})();
+</script>
+
+</body>
+</html>
