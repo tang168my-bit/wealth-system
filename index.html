@@ -88,6 +88,8 @@ details.fx[open] summary{border-bottom:1px solid var(--line)}
 .fsrc{font-size:.76rem;color:var(--muted)}
 .lib{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:10px}
 .lib .fcard{border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.howto{background:var(--accent-soft);border-radius:10px;padding:10px 12px;display:grid;gap:4px;font-size:.86rem}
+.howto b{color:var(--accent);margin-right:6px}
 .chart svg{width:100%;height:auto;display:block}
 .legend{display:flex;gap:14px;font-size:.8rem;color:var(--muted)}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
@@ -448,7 +450,9 @@ function form(obj,fields){
 const DL=`<datalist id="dl-src"><option>佣金</option><option>薪金</option><option>租金</option><option>股息</option><option>利息</option><option>保單提取</option><option>副業</option></datalist>
 <datalist id="dl-cat"><option>住屋</option><option>飲食</option><option>交通</option><option>保險</option><option>醫療</option><option>子女教育</option><option>稅務</option><option>還款</option><option>家用</option><option>學習</option><option>娛樂</option><option>其他</option></datalist>`;
 function invDL(){const s=new Set(get('invest').map(r=>r.name).filter(Boolean));return `<datalist id="dl-inv">${[...s].map(n=>`<option>${esc(n)}</option>`).join('')}</datalist>`}
-function lead(t,d){return `<div class="lead"><h2>${t}</h2><p class="muted">${d}</p></div>`}
+const HOW={"財富總覽": ["每月記錄完收支之後打開，一眼看整體狀況。", "這一頁大部分自動計算。只需要在下面「其他資產」填現金、房產等投資以外的資產，現金類記得選「現金」。", "左邊色條：綠色達標、黃色接近、紅色要注意。應急金目標是 12 個月；兩個覆蓋率到 100%，代表被動收入已經夠生活或夠還債。"], "收入記錄：你的賺錢能力": ["每月一次，月底或者收到佣金之後。", "每個來源一行。佣金、薪金選「主動」；租金、股息、利息選「被動」。同一個月可以有很多行。", "下面按月統計。最值得留意的是「被動佔比」有沒有慢慢上升，上升代表你離財務自由越來越近。"], "支出記錄": ["每月一次。", "按類別填當月總數，不用逐筆記。可以參考信用卡月結單和銀行流水。", "「儲蓄率」是收入留得住的比例；「支出分佈」看錢主要花在哪裡，先檢討最大的一兩項。"], "借貸記錄": ["新借一筆錢的時候，或者每年檢查一次。", "每筆債一行：剩餘欠款、年利率、每月還款。「每月多還」只是試算，填了不代表真的要多還。", "「還清需要」和「剩餘總利息」是這筆債的真實代價。出現紅色「月供不夠付利息」，代表永遠還不完，要立即處理。"], "投資記錄": ["每次買入、賣出或者收到分派時記一筆；另外每月或每季記一次「現值」。", "同一個投資用同一個名稱。「投入」是放進去的錢；「取回」是拿回來的錢，包括股息；「現值」是當天這筆投資值多少。", "XIRR 是真實年化回報，已經考慮每筆錢進出的時間，比只看賺了多少準確。最大回撤是曾經從最高點跌了多少，代表你承受過的最壞情況。"], "倉位紀律": ["準備把一筆錢放進某個投資之前。", "假設跌幅填你想測試的最壞情況。凱利那幾格填你對這類投資的估計：勝率、平均每次贏多少、平均每次輸多少。「只用凱利的幾成」建議填 50 或更少。", "「回本要漲」提醒你大虧之後有多難回來。凱利比例是上限參考，不是目標。最大一筆投資超過你自己定的上限，會亮紅色。"], "看懂一家公司": ["研究一家想投資的公司的時候。", "從公司年報抄數字，每年一行，同一家公司最好填 3 至 5 年。「你估算的價值」是你認為整家公司值多少，不確定可以留空。", "毛利率看定價能力；ROE 看本錢的賺錢能力；現金轉換率低於 1，代表利潤多於真正收到的現金，要小心。下面的趨勢表看這些數字是否多年穩定。"], "槓桿交易記錄": ["每做一筆期權、融資或期貨交易，平倉後記錄。", "「自己投入」是你付出的保證金或權利金；「實際控制金額」是合約代表的總價值；盈虧在平倉後填。", "「每筆期望值」是負數，代表長期做下去會虧錢。紅色標籤是虧損可以超過本金的交易，要特別小心。"], "創業項目記錄": ["有新的生意構思，或者每季檢討進行中的項目。", "一個項目一行。構思中的填預計數字，進行中的填實際數字，毛利率填百分比。項目結束後把狀態改成成功或失敗。", "「保本營業額」是每月最少要做到的生意額；「週轉金可撐」看能撐多久；「時薪」跟你的工作收入比較，看值不值得投入時間。"], "機會橫向比較": ["手上有一筆錢，在幾個選擇之間猶豫的時候。", "先填比較年數。每個選擇一行，回報和最大可能跌幅按產品資料或你的判斷填。安全性 1 最低、5 最高；鎖定年數填錢要多久才能取出，隨時可取填 0。", "「機會成本」是選了這個等於放棄了多少。不要只看期末值，同時看安全性、流動性和回報風險比。"], "生活與養老預算": ["每年檢討一次退休計劃。", "年齡和壽命按自己的情況填；每月支出和可投資資產留空，會自動用你的記錄；三個假設由你決定。", "「財務自由數字」是投資資產要達到多少才能不靠工作生活；「完成度」看自己走了多遠；「折回今天要準備」是換算成今天的錢。"], "教育金": ["孩子出生後就可以開始算，每年檢討一次。", "費用填今年的學費加生活費，按目標國家或地區查；學費上漲和儲蓄回報是你的假設。", "「缺口」是還差多少；「每月需存」是從現在開始每月要存多少才能補上。"], "財富目標反推": ["想知道要達到某個財富目標，應該多賺、多存，還是追求更高回報的時候。", "先選目標類型；選被動收入目標要同時填收益率；現有資產和每月投入留空會用你的記錄。", "①至④是四條不同的路。下面的組合表一眼看出每月投入和回報率怎樣搭配；顯示「到不了」代表這個組合不可行。"], "投資和項目槓桿": ["考慮借錢投資、按揭買樓或者借錢做生意之前。", "填自有資金、借款和借款利率。三個情境的回報都要填，特別是悲觀情況。", "「保本回報」是資產回報最少要有多少才不虧；「本金虧光的回報」是跌到哪裡自己的錢會全部沒了。先看悲觀那一行，能接受才考慮。"], "保險槓桿": ["比較手上或者考慮中的保單槓桿的時候。", "用計劃書上的數字：每年保費、繳費年數、保額。醫療的保額填每年保障額。", "槓桿越高，每一元保費撬動的保障越多；「每 100 萬保額年保費」用來比較同類產品哪個便宜；重疾會顯示理賠能撐幾年收入。"]};
+function how(h){return h?`<div class="howto"><div><b>什麼時候用</b>${h[0]}</div><div><b>怎麼填</b>${h[1]}</div><div><b>怎麼看</b>${h[2]}</div></div>`:''}
+function lead(t,d){return `<div class="lead"><h2>${t}</h2><p class="muted">${d}</p></div>${how(HOW[t])}`}
 
 const TABS=[
 {id:'home',name:'總覽',html:()=>`<section class="sheet">${lead('財富總覽','所有數字都從你的記錄自動算出。先在各分區記錄，這裡就會亮起來。')}<div id="sum"></div></section>
@@ -514,7 +518,7 @@ const TABS=[
   return `<div class="tiles">${kv('期末值最高',esc(best.name||'未命名'),'',money(cmpFV(best)))}${kv('安全性最高',esc(safest.name||'未命名'),'',ok(N(safest.safe))?'安全性 '+safest.safe:'')}</div><p class="hint">回報最高的不一定最適合。同時看安全性、流動性和最大可能跌幅，再決定。</p>`}},
 {id:'budget',name:'未來預算',html:()=>`<section class="sheet">${lead('生活與養老預算','留空的格子會自動用你的記錄：每月支出用最近 6 個月平均，可投資資產用投資現值。')}${form('budget',[{k:'age',l:'現在幾歲'},{k:'ret',l:'想幾歲退休'},{k:'life',l:'預計壽命'},{k:'exp',l:'每月生活支出',ph:'留空＝用記錄平均'},{k:'assets',l:'可投資資產',ph:'留空＝用投資現值'}])}
  <div class="assume"><span class="lbl">假設（由你填寫）</span>${form('budget',[{k:'g',l:'生活通脹 %'},{k:'r',l:'退休後資金回報 %'},{k:'w',l:'每年可提取比例 %'}])}</div><div id="sum"></div>${fx(['fire','futexp','gapv','defer','livgap'])}</section>
- <section class="sheet"><h3>教育金</h3>${form('budget',[{k:'eAge',l:'孩子現在幾歲'},{k:'eStart',l:'幾歲入讀大學'},{k:'eYears',l:'讀幾年'},{k:'eCost',l:'今年每年學費＋生活費'},{k:'eHave',l:'已準備的教育金'}])}
+ <section class="sheet"><h3>教育金</h3>${how(HOW["教育金"])}${form('budget',[{k:'eAge',l:'孩子現在幾歲'},{k:'eStart',l:'幾歲入讀大學'},{k:'eYears',l:'讀幾年'},{k:'eCost',l:'今年每年學費＋生活費'},{k:'eHave',l:'已準備的教育金'}])}
  <div class="assume"><span class="lbl">假設（由你填寫）</span>${form('budget',[{k:'eInf',l:'學費每年上漲 %'},{k:'eRet',l:'儲蓄每年回報 %'}])}</div><div id="sum2"></div>${fx(['edu','pmt'])}</section>`,
  sum:()=>{const b=get('budget'),rc=recent(),inv=investSummary();
   const me=ok(N(b.exp))?N(b.exp):rc.exp,A=ok(N(b.assets))?N(b.assets):inv.total;
@@ -553,7 +557,7 @@ const TABS=[
 {id:'levsim',name:'槓桿模擬',html:()=>`<section class="sheet">${lead('投資和項目槓桿','借錢投資或做項目，看樂觀、一般、悲觀三種情況。槓桿會同時放大賺和虧，一定要看悲觀那一欄。')}
  ${form('levsim',[{k:'E',l:'自有資金'},{k:'D',l:'借款金額'},{k:'i',l:'借款年利率 %'}])}
  <div class="assume"><span class="lbl">情境假設（由你填寫）</span>${form('levsim',[{k:'rO',l:'樂觀年回報 %'},{k:'rB',l:'一般年回報 %'},{k:'rP',l:'悲觀年回報 %'}])}</div><div id="sum"></div>${fx(['lev','levret','breakeven','wipe'])}</section>
- <section class="sheet"><h3>保險槓桿</h3><p class="muted">用計劃書上的真實數字填寫。</p>${table('ins')}${fx(['inslev','per1m','ciyears','cigap','lifegap','medgap'])}</section>
+ <section class="sheet"><h3>保險槓桿</h3><p class="muted">用計劃書上的真實數字填寫。</p>${how(HOW["保險槓桿"])}${table('ins')}${fx(['inslev','per1m','ciyears','cigap','lifegap','medgap'])}</section>
  <section class="sheet"><h3>槓桿總覽</h3><div id="sum2"></div></section>`,
  sum:()=>{const o=get('levsim');const E=N(o.E),D=N(o.D)||0,i=(N(o.i)||0)/100;if(!(E>0))return '<p class="hint">先填自有資金。</p>';
   const T=E+D,lv=T/E;const sc=[['樂觀',N(o.rO)],['一般',N(o.rB)],['悲觀',N(o.rP)]];
@@ -566,16 +570,16 @@ const TABS=[
   if(t.length){const avg=t.reduce((s,r)=>s+N(r.notional)/N(r.cap),0)/t.length;const risky=t.filter(r=>r.over==='是'||r.kind==='賣出期權').length;rows.push(['槓桿交易（平均）',num(avg,1)+' 倍',risky?`<span class="tag bad">${risky} 筆虧損可超過本金</span>`:'虧損有上限','視乎合約到期日'])}
   if(!rows.length)return '<p class="hint">填了上面的投資槓桿、保險，或在「槓桿交易」記錄後，這裡會並排比較。</p>';
   return `<div class="tbl-wrap"><table class="tbl read"><thead><tr><th>槓桿來源</th><th>放大倍數</th><th>最差情況</th><th>錢被鎖住多久</th></tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`}},
-{id:'quick',name:'小計算器',html:()=>{const card=(t,d,fields,id,keys)=>`<section class="sheet"><div class="lead"><h3>${t}</h3><p class="muted">${d}</p></div>${form('quick',fields)}<div id="${id}"></div>${fx(keys)}</section>`;
+{id:'quick',name:'小計算器',html:()=>{const card=(t,d,fields,id,keys,h)=>`<section class="sheet"><div class="lead"><h3>${t}</h3><p class="muted">${d}</p></div>${h?`<div class="howto"><div><b>什麼時候用</b>${h[0]}</div><div><b>怎麼填</b>${h[1]}</div><div><b>怎麼看</b>${h[2]}</div></div>`:''}${form('quick',fields)}<div id="${id}"></div>${fx(keys)}</section>`;
  return `<section class="sheet">${lead('小計算器','臨時要算一個數，就在這裡算。填的數字會保留，方便下次再看。')}</section>`+
- card('單利與複利換算','一次過投入、到期一次過拿回的投資。',[{k:'s_p',l:'本金'},{k:'s_f',l:'到期拿回'},{k:'s_n',l:'年數'}],'q1',['simple','cagr2','moic'])+
- card('72 法則：多久翻倍','心算複利的快捷方法，下面同時顯示精確答案。',[{k:'r72',l:'年回報 %'}],'q2',['rule72'])+
- card('租金回報率','看樓時最常用。',[{k:'ry_p',l:'樓價'},{k:'ry_c',l:'買入成本（印花稅、佣金、裝修）'},{k:'ry_r',l:'每月租金'},{k:'ry_h',l:'每年持有成本（管理費、差餉、維修、空置）'}],'q3',['rentyield'])+
- card('匯率調整後回報','外幣資產換回你的本幣，真實回報是多少。',[{k:'fx_a',l:'資產本身的回報 %'},{k:'fx_x',l:'外幣對本幣的升跌 %（跌就填負數）'}],'q4',['fxret'])+
- card('費用侵蝕','每年的管理費，長期會吃掉多少。',[{k:'fe_p',l:'本金'},{k:'fe_r',l:'年回報 %（未扣費用）'},{k:'fe_f',l:'每年費用 %'},{k:'fe_n',l:'年數'}],'q5',['feedrag'])+
- card('實際年利率','名義利率按月或按日計息，實際一年付多少。',[{k:'ea_r',l:'名義年利率 %'},{k:'ea_m',l:'每年計息次數（按月填 12）'}],'q6',['ear'])+
- card('平息貸款換算','私人貸款常報「月平息」，換算成真實的年利率。',[{k:'fl_l',l:'貸款金額'},{k:'fl_r',l:'月平息 %'},{k:'fl_n',l:'還款期（月）'}],'q7',['ear','payoff'])+
- card('供款負擔比率','借錢前先算。留空會用你的記錄。',[{k:'ds_p',l:'每月總還款',ph:'留空＝借貸記錄合計'},{k:'ds_i',l:'每月收入',ph:'留空＝最近平均收入'}],'q8',['dsr'])},
+ card('單利與複利換算','一次過投入、到期一次過拿回的投資。',[{k:'s_p',l:'本金'},{k:'s_f',l:'到期拿回'},{k:'s_n',l:'年數'}],'q1',['simple','cagr2','moic'],['別人說「放 X 元，幾年後拿回 Y 元」，或者宣傳某個年回報，你想核實是真是假的時候。','本金填一開始放進去的錢；到期拿回填最後一次過拿回的總額；年數填持有多久。','比較不同產品時，只看「複利年回報」。「兩者相差」越大，代表用單利講出來的數字越誇大。'])+
+ card('72 法則：多久翻倍','心算複利的快捷方法，下面同時顯示精確答案。',[{k:'r72',l:'年回報 %'}],'q2',['rule72'],['想快速知道錢多久會翻一倍，或者跟人聊天時想心算。','填年回報百分比，例如 6% 就填 6，不是 0.06。','顯示大約幾年翻倍。也可以反過來用在通脹上：通脹 3% 時，錢的購買力大約 24 年減半。'])+
+ card('租金回報率','看樓時最常用。',[{k:'ry_p',l:'樓價'},{k:'ry_c',l:'買入成本（印花稅、佣金、裝修）'},{k:'ry_r',l:'每月租金'},{k:'ry_h',l:'每年持有成本（管理費、差餉、維修、空置）'}],'q3',['rentyield'],['考慮買樓收租，或者想比較收租和存款、債券等其他選擇的時候。','樓價和買入成本是一次過的錢；租金填每月的；持有成本填一年加起來的總數。','「淨租金回報率」才是真實收益，可以直接拿來跟存款利率比較。毛回報只是表面數字。'])+
+ card('匯率調整後回報','外幣資產換回你的本幣，真實回報是多少。',[{k:'fx_a',l:'資產本身的回報 %'},{k:'fx_x',l:'外幣對本幣的升跌 %（跌就填負數）'}],'q4',['fxret'],['持有外幣資產，例如美元存款、美股，想知道換回自己的貨幣後真正賺了多少。','資產回報填外幣本身的回報；匯率變動：外幣兌你的貨幣升了填正數，跌了填負數，例如跌 2% 填 -2。','結果是用你自己的貨幣計算的真實回報。匯率跌得多，可能把資產本身的回報全部抵銷。'])+
+ card('費用侵蝕','每年的管理費，長期會吃掉多少。',[{k:'fe_p',l:'本金'},{k:'fe_r',l:'年回報 %（未扣費用）'},{k:'fe_f',l:'每年費用 %'},{k:'fe_n',l:'年數'}],'q5',['feedrag'],['買基金、用投資平台或者付費顧問服務之前，想看費用長遠會吃掉多少。','本金、扣費前的年回報、每年費用百分比（基金說明書上的「管理費」或「總開支比率」）、年數。','看「被費用吃掉」那一格。試試把年數改大，會看到差距越拉越闊。'])+
+ card('實際年利率','名義利率按月或按日計息，實際一年付多少。',[{k:'ea_r',l:'名義年利率 %'},{k:'ea_m',l:'每年計息次數（按月填 12）'}],'q6',['ear'],['比較不同的存款或貸款利率，而它們的計息方式不同時。','名義年利率填報價上的年利率；計息次數：按月填 12，按季填 4，按日填 365。','實際年利率會比名義利率略高。比較時一律用實際年利率。'])+
+ card('平息貸款換算','私人貸款常報「月平息」，換算成真實的年利率。',[{k:'fl_l',l:'貸款金額'},{k:'fl_r',l:'月平息 %'},{k:'fl_n',l:'還款期（月）'}],'q7',['ear','payoff'],['私人貸款、信用卡分期或者商品分期廣告寫「月平息」的時候。','貸款金額、月平息（廣告上寫 0.25% 就填 0.25）、還款月數。','「真實年利率」才是真正的借貸成本，通常遠高於「月平息 × 12」。拿真實年利率跟銀行貸款比較。'])+
+ card('供款負擔比率','借錢前先算。留空會用你的記錄。',[{k:'ds_p',l:'每月總還款',ph:'留空＝借貸記錄合計'},{k:'ds_i',l:'每月收入',ph:'留空＝最近平均收入'}],'q8',['dsr'],['申請按揭或者任何貸款之前，想知道自己的還款壓力有多大。','留空就自動用你「借貸」和「收入」的記錄；也可以自己填每月所有還款總數和每月收入。','比例越高，收入一旦出問題就越危險。銀行審批按揭時也會看這個比率。'])},
  sum:()=>'',after:()=>{const q=get('quick'),v=k=>N(q[k]),set=(id,h)=>{const e=$(id);if(e)e.innerHTML=`<div class="tiles">${h}</div>`};
   {const P=v('s_p'),F=v('s_f'),n=v('s_n');const ok3=P>0&&ok(F)&&n>0;const si=ok3?(F/P-1)/n:NaN,co=ok3&&F>0?Math.pow(F/P,1/n)-1:NaN;
    set('q1',kv('單利年回報',pct(si,2))+kv('複利年回報',pct(co,2))+kv('兩者相差',ok(si)&&ok(co)?pct(si-co,2):'–','','單利聽起來高了這麼多')+kv('總回報倍數',ok3?num(F/P,2)+' 倍':'–'))}
