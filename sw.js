@@ -1,7 +1,7 @@
 // 離線功能：第一次打開時把工具存到 iPad，之後沒有網絡也能用。
 // 每次更新工具時，把 VERSION 加一，iPad 下次有網絡打開時就會自動換成新版本。
-const VERSION = 'wealthsystem-v4';
-const FILES = ['./', './index.html', './manifest.json', './icon.png', './apple-touch-icon.png'];
+const VERSION = 'wealthsystem-v5';
+const FILES = ['./', './index.html', './manifest.json', './icon.png', './apple-touch-icon.png', './html2canvas.min.js'];
 
 self.addEventListener('install', e => {
   // cache:'reload' 繞過瀏覽器暫存，確保拿到的是 GitHub 上最新的檔案

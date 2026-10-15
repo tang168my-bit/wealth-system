@@ -90,6 +90,18 @@ details.fx[open] summary{border-bottom:1px solid var(--line)}
 .lib .fcard{border:1px solid var(--line);border-radius:12px;background:var(--surface)}
 .howto{background:var(--accent-soft);border-radius:10px;padding:10px 12px;display:grid;gap:4px;font-size:.86rem}
 .howto b{color:var(--accent);margin-right:6px}
+.fbar{background:#fbe7d4;color:#8a4a12;border-radius:12px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;font-size:.9rem}
+.btn.warm{background:#c0661c;border-color:#c0661c}
+.btn.warm.ghost{background:transparent;color:#c0661c}
+.repsel{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:6px}
+.repsel label{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:.9rem;cursor:pointer}
+.repsel input{width:auto;min-height:0}
+.repwrap{overflow-x:auto}
+#rep-card{width:720px;max-width:none;background:#fff;color:#15262d;border:1px solid var(--line);border-radius:14px;padding:26px;display:flex;flex-direction:column;gap:16px}
+#rep-card .rh{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid var(--accent);padding-bottom:10px}
+#rep-card h3{font-size:1.05rem;color:var(--accent)}
+#rep-card .rfoot{font-size:.75rem;color:var(--muted);border-top:1px solid var(--line);padding-top:8px}
+#rep-img img{width:100%;max-width:720px;border:1px solid var(--line);border-radius:10px}
 .chart svg{width:100%;height:auto;display:block}
 .legend{display:flex;gap:14px;font-size:.8rem;color:var(--muted)}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
@@ -138,6 +150,7 @@ details.fx[open] summary{border-bottom:1px solid var(--line)}
       <p class="muted">記錄真實數字，在用的過程中學會每一條公式</p>
     </div>
     <div class="top-r">
+      <button type="button" class="btn small warm ghost" id="friend-btn">幫朋友算</button>
       <span class="pill local" id="sync" aria-live="polite">離線版：資料存在這部設備，記得定期複製備份</span>
       <label class="muted" for="cur" style="display:flex;gap:6px;align-items:center">幣種
         <select id="cur" style="width:auto;min-height:36px">
@@ -146,10 +159,12 @@ details.fx[open] summary{border-bottom:1px solid var(--line)}
       </label>
     </div>
   </header>
+  <div class="fbar" id="friend-bar" hidden><span><b>朋友模式</b>：這裡填的數字不會存進你的記錄。算完先到「報告」生成圖片，結束後朋友的數字會清空。</span><button type="button" class="btn small warm" id="friend-exit">結束朋友模式</button></div>
   <nav class="nav" id="nav" aria-label="系統分區"></nav>
   <main id="main"></main>
 </div>
 
+<script src="html2canvas.min.js"></script>
 <script>
 (function(){
 "use strict";
@@ -173,7 +188,7 @@ function kv(label,val,c,note){return `<div class="kv ${c||''}"><span>${label}</s
 const DEF={
   settings:{cur:'HK$'},
   income:[],expense:[],assets:[],debts:[],invest:[],trades:[],biz:[],compare:[],ins:[],
-  budget:{},goal:{type:'asset',rates:'2,4,6,8,10'},levsim:{},cmpYears:'',firms:[],disc:{},quick:{},
+  budget:{},goal:{type:'asset',rates:'2,4,6,8,10'},levsim:{},cmpYears:'',firms:[],disc:{},quick:{},report:{name:'',sel:['home']},
   check:{answers:{},selected:[],vals:{},medHas:'',leg:[null,null,null,null,null,null]},
   checkRecords:[]
 };
@@ -186,7 +201,8 @@ KEYS.forEach(get);
 function saveLocal(){try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}}
 let cloud=null;const timers={},dirty={},writing={};
 function setSync(m){const el=$('sync');if(m==='cloud'){el.className='pill';el.textContent='已存到你的帳戶，換設備也看得到'}else if(m==='err'){el.className='pill err';el.textContent='雲端暫時存不到，資料先留在這台設備'}else{el.className='pill local';el.textContent='離線版：資料存在這部設備，記得定期複製備份'}}
-function persist(k){saveLocal();if(!cloud)return;dirty[k]=(dirty[k]||0)+1;clearTimeout(timers[k]);timers[k]=setTimeout(()=>writeCloud(k),700)}
+let FRIEND=false,SAVED=null;
+function persist(k){if(FRIEND)return;saveLocal();if(!cloud)return;dirty[k]=(dirty[k]||0)+1;clearTimeout(timers[k]);timers[k]=setTimeout(()=>writeCloud(k),700)}
 async function writeCloud(k){
   if(writing[k]){timers[k]=setTimeout(()=>writeCloud(k),400);return}
   writing[k]=true;const v=dirty[k];
@@ -201,16 +217,16 @@ async function initCloud(){
     cloud=db.collection('data/users/'+id);
     const snap=await cloud.get();
     if(snap.empty){for(const k of KEYS){if(JSON.stringify(S[k])!==JSON.stringify(DEF[k])){dirty[k]=1;await writeCloud(k)}}}
-    else{snap.docs.forEach(d=>{const b=d.data();if(b&&'v' in b&&KEYS.includes(d.id))S[d.id]=b.v});saveLocal();render()}
+    else{const tgt=FRIEND?SAVED:S;snap.docs.forEach(d=>{const b=d.data();if(b&&'v' in b&&KEYS.includes(d.id))tgt[d.id]=b.v});if(!FRIEND){saveLocal();render()}}
     setSync('cloud');
     cloud.onSnapshot(qs=>{
       let changed=false;
       qs.docChanges().forEach(ch=>{
         if(ch.type==='removed')return;const k=ch.doc.id;if(!KEYS.includes(k)||dirty[k])return;
         if(ch.doc.metadata.hasPendingWrites)return;const b=ch.doc.data();if(!b||!('v' in b))return;
-        if(JSON.stringify(S[k])!==JSON.stringify(b.v)){S[k]=b.v;changed=true}
+        if(FRIEND){SAVED[k]=b.v;return}if(JSON.stringify(S[k])!==JSON.stringify(b.v)){S[k]=b.v;changed=true}
       });
-      if(changed){saveLocal();const a=document.activeElement;if(!a||!$('main').contains(a)||a.tagName==='BUTTON')render()}
+      if(changed&&!FRIEND){saveLocal();const a=document.activeElement;if(!a||!$('main').contains(a)||a.tagName==='BUTTON')render()}
     },()=>setSync('err'));
   }catch(e){}
 }
@@ -450,7 +466,7 @@ function form(obj,fields){
 const DL=`<datalist id="dl-src"><option>佣金</option><option>薪金</option><option>租金</option><option>股息</option><option>利息</option><option>保單提取</option><option>副業</option></datalist>
 <datalist id="dl-cat"><option>住屋</option><option>飲食</option><option>交通</option><option>保險</option><option>醫療</option><option>子女教育</option><option>稅務</option><option>還款</option><option>家用</option><option>學習</option><option>娛樂</option><option>其他</option></datalist>`;
 function invDL(){const s=new Set(get('invest').map(r=>r.name).filter(Boolean));return `<datalist id="dl-inv">${[...s].map(n=>`<option>${esc(n)}</option>`).join('')}</datalist>`}
-const HOW={"財富總覽": ["每月記錄完收支之後打開，一眼看整體狀況。", "這一頁大部分自動計算。只需要在下面「其他資產」填現金、房產等投資以外的資產，現金類記得選「現金」。", "左邊色條：綠色達標、黃色接近、紅色要注意。應急金目標是 12 個月；兩個覆蓋率到 100%，代表被動收入已經夠生活或夠還債。"], "收入記錄：你的賺錢能力": ["每月一次，月底或者收到佣金之後。", "每個來源一行。佣金、薪金選「主動」；租金、股息、利息選「被動」。同一個月可以有很多行。", "下面按月統計。最值得留意的是「被動佔比」有沒有慢慢上升，上升代表你離財務自由越來越近。"], "支出記錄": ["每月一次。", "按類別填當月總數，不用逐筆記。可以參考信用卡月結單和銀行流水。", "「儲蓄率」是收入留得住的比例；「支出分佈」看錢主要花在哪裡，先檢討最大的一兩項。"], "借貸記錄": ["新借一筆錢的時候，或者每年檢查一次。", "每筆債一行：剩餘欠款、年利率、每月還款。「每月多還」只是試算，填了不代表真的要多還。", "「還清需要」和「剩餘總利息」是這筆債的真實代價。出現紅色「月供不夠付利息」，代表永遠還不完，要立即處理。"], "投資記錄": ["每次買入、賣出或者收到分派時記一筆；另外每月或每季記一次「現值」。", "同一個投資用同一個名稱。「投入」是放進去的錢；「取回」是拿回來的錢，包括股息；「現值」是當天這筆投資值多少。", "XIRR 是真實年化回報，已經考慮每筆錢進出的時間，比只看賺了多少準確。最大回撤是曾經從最高點跌了多少，代表你承受過的最壞情況。"], "倉位紀律": ["準備把一筆錢放進某個投資之前。", "假設跌幅填你想測試的最壞情況。凱利那幾格填你對這類投資的估計：勝率、平均每次贏多少、平均每次輸多少。「只用凱利的幾成」建議填 50 或更少。", "「回本要漲」提醒你大虧之後有多難回來。凱利比例是上限參考，不是目標。最大一筆投資超過你自己定的上限，會亮紅色。"], "看懂一家公司": ["研究一家想投資的公司的時候。", "從公司年報抄數字，每年一行，同一家公司最好填 3 至 5 年。「你估算的價值」是你認為整家公司值多少，不確定可以留空。", "毛利率看定價能力；ROE 看本錢的賺錢能力；現金轉換率低於 1，代表利潤多於真正收到的現金，要小心。下面的趨勢表看這些數字是否多年穩定。"], "槓桿交易記錄": ["每做一筆期權、融資或期貨交易，平倉後記錄。", "「自己投入」是你付出的保證金或權利金；「實際控制金額」是合約代表的總價值；盈虧在平倉後填。", "「每筆期望值」是負數，代表長期做下去會虧錢。紅色標籤是虧損可以超過本金的交易，要特別小心。"], "創業項目記錄": ["有新的生意構思，或者每季檢討進行中的項目。", "一個項目一行。構思中的填預計數字，進行中的填實際數字，毛利率填百分比。項目結束後把狀態改成成功或失敗。", "「保本營業額」是每月最少要做到的生意額；「週轉金可撐」看能撐多久；「時薪」跟你的工作收入比較，看值不值得投入時間。"], "機會橫向比較": ["手上有一筆錢，在幾個選擇之間猶豫的時候。", "先填比較年數。每個選擇一行，回報和最大可能跌幅按產品資料或你的判斷填。安全性 1 最低、5 最高；鎖定年數填錢要多久才能取出，隨時可取填 0。", "「機會成本」是選了這個等於放棄了多少。不要只看期末值，同時看安全性、流動性和回報風險比。"], "生活與養老預算": ["每年檢討一次退休計劃。", "年齡和壽命按自己的情況填；每月支出和可投資資產留空，會自動用你的記錄；三個假設由你決定。", "「財務自由數字」是投資資產要達到多少才能不靠工作生活；「完成度」看自己走了多遠；「折回今天要準備」是換算成今天的錢。"], "教育金": ["孩子出生後就可以開始算，每年檢討一次。", "費用填今年的學費加生活費，按目標國家或地區查；學費上漲和儲蓄回報是你的假設。", "「缺口」是還差多少；「每月需存」是從現在開始每月要存多少才能補上。"], "財富目標反推": ["想知道要達到某個財富目標，應該多賺、多存，還是追求更高回報的時候。", "先選目標類型；選被動收入目標要同時填收益率；現有資產和每月投入留空會用你的記錄。", "①至④是四條不同的路。下面的組合表一眼看出每月投入和回報率怎樣搭配；顯示「到不了」代表這個組合不可行。"], "投資和項目槓桿": ["考慮借錢投資、按揭買樓或者借錢做生意之前。", "填自有資金、借款和借款利率。三個情境的回報都要填，特別是悲觀情況。", "「保本回報」是資產回報最少要有多少才不虧；「本金虧光的回報」是跌到哪裡自己的錢會全部沒了。先看悲觀那一行，能接受才考慮。"], "保險槓桿": ["比較手上或者考慮中的保單槓桿的時候。", "用計劃書上的數字：每年保費、繳費年數、保額。醫療的保額填每年保障額。", "槓桿越高，每一元保費撬動的保障越多；「每 100 萬保額年保費」用來比較同類產品哪個便宜；重疾會顯示理賠能撐幾年收入。"]};
+const HOW={"生成報告":["幫朋友算完之後，或者想把自己的結果整理成一張圖的時候。","填報告對象的名稱或代號，勾選要放進報告的分區，再按「生成報告圖片」。","先看下面的預覽，確認內容沒問題，再按「分享或儲存圖片」，選微信或 WhatsApp 傳送。"],"財富總覽": ["每月記錄完收支之後打開，一眼看整體狀況。", "這一頁大部分自動計算。只需要在下面「其他資產」填現金、房產等投資以外的資產，現金類記得選「現金」。", "左邊色條：綠色達標、黃色接近、紅色要注意。應急金目標是 12 個月；兩個覆蓋率到 100%，代表被動收入已經夠生活或夠還債。"], "收入記錄：你的賺錢能力": ["每月一次，月底或者收到佣金之後。", "每個來源一行。佣金、薪金選「主動」；租金、股息、利息選「被動」。同一個月可以有很多行。", "下面按月統計。最值得留意的是「被動佔比」有沒有慢慢上升，上升代表你離財務自由越來越近。"], "支出記錄": ["每月一次。", "按類別填當月總數，不用逐筆記。可以參考信用卡月結單和銀行流水。", "「儲蓄率」是收入留得住的比例；「支出分佈」看錢主要花在哪裡，先檢討最大的一兩項。"], "借貸記錄": ["新借一筆錢的時候，或者每年檢查一次。", "每筆債一行：剩餘欠款、年利率、每月還款。「每月多還」只是試算，填了不代表真的要多還。", "「還清需要」和「剩餘總利息」是這筆債的真實代價。出現紅色「月供不夠付利息」，代表永遠還不完，要立即處理。"], "投資記錄": ["每次買入、賣出或者收到分派時記一筆；另外每月或每季記一次「現值」。", "同一個投資用同一個名稱。「投入」是放進去的錢；「取回」是拿回來的錢，包括股息；「現值」是當天這筆投資值多少。", "XIRR 是真實年化回報，已經考慮每筆錢進出的時間，比只看賺了多少準確。最大回撤是曾經從最高點跌了多少，代表你承受過的最壞情況。"], "倉位紀律": ["準備把一筆錢放進某個投資之前。", "假設跌幅填你想測試的最壞情況。凱利那幾格填你對這類投資的估計：勝率、平均每次贏多少、平均每次輸多少。「只用凱利的幾成」建議填 50 或更少。", "「回本要漲」提醒你大虧之後有多難回來。凱利比例是上限參考，不是目標。最大一筆投資超過你自己定的上限，會亮紅色。"], "看懂一家公司": ["研究一家想投資的公司的時候。", "從公司年報抄數字，每年一行，同一家公司最好填 3 至 5 年。「你估算的價值」是你認為整家公司值多少，不確定可以留空。", "毛利率看定價能力；ROE 看本錢的賺錢能力；現金轉換率低於 1，代表利潤多於真正收到的現金，要小心。下面的趨勢表看這些數字是否多年穩定。"], "槓桿交易記錄": ["每做一筆期權、融資或期貨交易，平倉後記錄。", "「自己投入」是你付出的保證金或權利金；「實際控制金額」是合約代表的總價值；盈虧在平倉後填。", "「每筆期望值」是負數，代表長期做下去會虧錢。紅色標籤是虧損可以超過本金的交易，要特別小心。"], "創業項目記錄": ["有新的生意構思，或者每季檢討進行中的項目。", "一個項目一行。構思中的填預計數字，進行中的填實際數字，毛利率填百分比。項目結束後把狀態改成成功或失敗。", "「保本營業額」是每月最少要做到的生意額；「週轉金可撐」看能撐多久；「時薪」跟你的工作收入比較，看值不值得投入時間。"], "機會橫向比較": ["手上有一筆錢，在幾個選擇之間猶豫的時候。", "先填比較年數。每個選擇一行，回報和最大可能跌幅按產品資料或你的判斷填。安全性 1 最低、5 最高；鎖定年數填錢要多久才能取出，隨時可取填 0。", "「機會成本」是選了這個等於放棄了多少。不要只看期末值，同時看安全性、流動性和回報風險比。"], "生活與養老預算": ["每年檢討一次退休計劃。", "年齡和壽命按自己的情況填；每月支出和可投資資產留空，會自動用你的記錄；三個假設由你決定。", "「財務自由數字」是投資資產要達到多少才能不靠工作生活；「完成度」看自己走了多遠；「折回今天要準備」是換算成今天的錢。"], "教育金": ["孩子出生後就可以開始算，每年檢討一次。", "費用填今年的學費加生活費，按目標國家或地區查；學費上漲和儲蓄回報是你的假設。", "「缺口」是還差多少；「每月需存」是從現在開始每月要存多少才能補上。"], "財富目標反推": ["想知道要達到某個財富目標，應該多賺、多存，還是追求更高回報的時候。", "先選目標類型；選被動收入目標要同時填收益率；現有資產和每月投入留空會用你的記錄。", "①至④是四條不同的路。下面的組合表一眼看出每月投入和回報率怎樣搭配；顯示「到不了」代表這個組合不可行。"], "投資和項目槓桿": ["考慮借錢投資、按揭買樓或者借錢做生意之前。", "填自有資金、借款和借款利率。三個情境的回報都要填，特別是悲觀情況。", "「保本回報」是資產回報最少要有多少才不虧；「本金虧光的回報」是跌到哪裡自己的錢會全部沒了。先看悲觀那一行，能接受才考慮。"], "保險槓桿": ["比較手上或者考慮中的保單槓桿的時候。", "用計劃書上的數字：每年保費、繳費年數、保額。醫療的保額填每年保障額。", "槓桿越高，每一元保費撬動的保障越多；「每 100 萬保額年保費」用來比較同類產品哪個便宜；重疾會顯示理賠能撐幾年收入。"]};
 function how(h){return h?`<div class="howto"><div><b>什麼時候用</b>${h[0]}</div><div><b>怎麼填</b>${h[1]}</div><div><b>怎麼看</b>${h[2]}</div></div>`:''}
 function lead(t,d){return `<div class="lead"><h2>${t}</h2><p class="muted">${d}</p></div>${how(HOW[t])}`}
 
@@ -580,7 +596,7 @@ const TABS=[
  card('實際年利率','名義利率按月或按日計息，實際一年付多少。',[{k:'ea_r',l:'名義年利率 %'},{k:'ea_m',l:'每年計息次數（按月填 12）'}],'q6',['ear'],['比較不同的存款或貸款利率，而它們的計息方式不同時。','名義年利率填報價上的年利率；計息次數：按月填 12，按季填 4，按日填 365。','實際年利率會比名義利率略高。比較時一律用實際年利率。'])+
  card('平息貸款換算','私人貸款常報「月平息」，換算成真實的年利率。',[{k:'fl_l',l:'貸款金額'},{k:'fl_r',l:'月平息 %'},{k:'fl_n',l:'還款期（月）'}],'q7',['ear','payoff'],['私人貸款、信用卡分期或者商品分期廣告寫「月平息」的時候。','貸款金額、月平息（廣告上寫 0.25% 就填 0.25）、還款月數。','「真實年利率」才是真正的借貸成本，通常遠高於「月平息 × 12」。拿真實年利率跟銀行貸款比較。'])+
  card('供款負擔比率','借錢前先算。留空會用你的記錄。',[{k:'ds_p',l:'每月總還款',ph:'留空＝借貸記錄合計'},{k:'ds_i',l:'每月收入',ph:'留空＝最近平均收入'}],'q8',['dsr'],['申請按揭或者任何貸款之前，想知道自己的還款壓力有多大。','留空就自動用你「借貸」和「收入」的記錄；也可以自己填每月所有還款總數和每月收入。','比例越高，收入一旦出問題就越危險。銀行審批按揭時也會看這個比率。'])},
- sum:()=>'',after:()=>{const q=get('quick'),v=k=>N(q[k]),set=(id,h)=>{const e=$(id);if(e)e.innerHTML=`<div class="tiles">${h}</div>`};
+ sum:()=>'',after:()=>{const q=get('quick'),v=k=>N(q[k]),set=(id,h)=>{const x=`<div class="tiles">${h}</div>`;QR[id]=x;const e=$(id);if(e)e.innerHTML=x};
   {const P=v('s_p'),F=v('s_f'),n=v('s_n');const ok3=P>0&&ok(F)&&n>0;const si=ok3?(F/P-1)/n:NaN,co=ok3&&F>0?Math.pow(F/P,1/n)-1:NaN;
    set('q1',kv('單利年回報',pct(si,2))+kv('複利年回報',pct(co,2))+kv('兩者相差',ok(si)&&ok(co)?pct(si-co,2):'–','','單利聽起來高了這麼多')+kv('總回報倍數',ok3?num(F/P,2)+' 倍':'–'))}
   {const r=v('r72');set('q2',kv('72 法則估算',r>0?num(72/r,1)+' 年':'–')+kv('精確答案',r>0?num(Math.log(2)/Math.log(1+r/100),1)+' 年':'–'))}
@@ -596,9 +612,63 @@ const TABS=[
   {const d=debtSummary(),rc=recent();const pay=ok(v('ds_p'))?v('ds_p'):d.pay,inc=ok(v('ds_i'))?v('ds_i'):rc.inc;const r=pay/inc;
    set('q8',kv('每月總還款',money(pay))+kv('每月收入',money(inc))+kv('供款負擔比率',inc>0&&ok(pay)?pct(r,0):'–'))}
  }},
+{id:'report',name:'報告',html:()=>{const r=get('report');return `<section class="sheet">${lead('生成報告','把選好的結果整理成一張圖片，可以傳給朋友。報告只包含你勾選的內容。')}
+ <div class="fields"><label class="f" for="rep-name">報告對象（名稱或代號）<input type="text" id="rep-name" data-o="report" data-k="name" value="${esc(r.name)}" placeholder="例如：陳先生"></label></div>
+ <div class="repsel">${REP.map(x=>`<label><input type="checkbox" data-repsel="${x.id}"${(r.sel||[]).indexOf(x.id)>-1?' checked':''}>${x.n}</label>`).join('')}</div>
+ <button type="button" class="btn" id="rep-make">生成報告圖片</button><p class="muted" id="rep-msg" aria-live="polite"></p>
+ <div id="rep-img"></div></section>
+ <section class="sheet"><h3>預覽</h3><div class="repwrap"><div id="rep-card"></div></div></section>`},sum:()=>'',after:()=>{const c=$('rep-card');if(c)c.innerHTML=reportHtml()}},
 {id:'lib',name:'公式庫',html:()=>{const cats=[...new Set(Object.values(F).map(f=>f.c))];return `<section class="sheet">${lead('公式庫','從你的 Notion 和以前的對話整理出來，每條都附 Excel 寫法和出處。查不到出處的「實證數據」沒有收錄。')}</section>${cats.map(c=>`<section class="sheet"><h3>${c}</h3><div class="lib">${Object.keys(F).filter(k=>F[k].c===c).map(fcard).join('')}</div></section>`).join('')}`},sum:()=>''},
 {id:'check',name:'客戶體檢',html:()=>checkHtml(),sum:()=>'',after:()=>checkAfter()}
 ];
+const QR={};
+function TB(id){return TABS.find(t=>t.id===id)}
+const QT={q1:'單利與複利換算',q2:'72 法則',q3:'租金回報率',q4:'匯率調整後回報',q5:'費用侵蝕',q6:'實際年利率',q7:'平息貸款換算',q8:'供款負擔比率'};
+const REP=[
+ {id:'home',n:'財富總覽',f:()=>TB('home').sum()},
+ {id:'income',n:'收入',f:()=>TB('income').sum()},
+ {id:'expense',n:'支出',f:()=>TB('expense').sum()},
+ {id:'debts',n:'借貸',f:()=>TB('debts').sum()},
+ {id:'invest',n:'投資表現',f:()=>TB('invest').sum()},
+ {id:'disc',n:'倉位紀律',f:()=>TB('invest').sum2()},
+ {id:'firms',n:'看公司',f:()=>TB('firms').sum()},
+ {id:'trades',n:'槓桿交易',f:()=>TB('trades').sum()},
+ {id:'biz',n:'創業',f:()=>TB('biz').sum()},
+ {id:'compare',n:'機會比較',f:()=>TB('compare').sum()},
+ {id:'life',n:'生活與養老',f:()=>TB('budget').sum()},
+ {id:'edu',n:'教育金',f:()=>TB('budget').sum2()},
+ {id:'goal',n:'財富目標反推',f:()=>TB('goal').sum()+TB('goal').sum2()},
+ {id:'lev',n:'投資槓桿',f:()=>TB('levsim').sum()},
+ {id:'levall',n:'槓桿總覽',f:()=>TB('levsim').sum2()},
+ {id:'quick',n:'小計算器結果',f:()=>{TB('quick').after();return Object.keys(QT).filter(k=>QR[k]&&/<b>[^–<]/.test(QR[k])&&(k!=='q8'||debtSummary().pay>0||ok(N(get('quick').ds_p)))).map(k=>`<div><b>${QT[k]}</b></div>`+QR[k]).join('')||'<p class="hint">小計算器還沒有填數字。</p>'}}];
+const LIT={'--accent-soft':'#e2efed','--accent':'#1d6b66','--gold-soft':'#f6eedb','--gold':'#9a6f18','--line':'#d8e2e0','--muted':'#5d6e75','--ink':'#15262d','--surface':'#ffffff','--bad':'#bb4136'};
+function reportHtml(){
+ const r=get('report'),sel=r.sel||[];const d=new Date();const ds=d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日';
+ let body=REP.filter(x=>sel.indexOf(x.id)>-1).map(x=>{let h='';try{h=x.f()}catch(e){h='<p class="hint">這部分暫時算不出來。</p>'}return `<section style="display:flex;flex-direction:column;gap:8px"><h3>${x.n}</h3>${h}</section>`}).join('');
+ if(!body)body='<p class="hint">請在上面勾選要放進報告的內容。</p>';
+ body=body.replace(/var\((--[a-z-]+)\)/g,(m,v)=>LIT[v]||m);
+ return `<div class="rh"><div><h2 style="font-size:1.4rem">財富報告</h2><p class="muted">${esc(r.name||'')}</p></div><p class="muted">${ds}・幣種 ${esc(cur())}</p></div>${body}<div class="rfoot">計算結果根據填寫的數字和假設得出，只供參考，不構成投資建議。</div>`;
+}
+async function makeImage(){
+ const msg=$('rep-msg');const card=$('rep-card');card.innerHTML=reportHtml();
+ if(typeof window.html2canvas!=='function'){msg.textContent='圖片工具載入不到，請在有網絡時重新打開再試。';return}
+ msg.textContent='正在生成圖片……';
+ try{const cv=await window.html2canvas(card,{scale:2,backgroundColor:'#ffffff',useCORS:true});
+  cv.toBlob(blob=>{if(!blob){msg.textContent='生成失敗，請再試一次。';return}
+   const r=get('report');const d=new Date();const fn='財富報告-'+(r.name||'未命名').replace(/[\\/:*?"<>|]/g,'')+'-'+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'.png';
+   const url=URL.createObjectURL(blob);window.__rep={blob,fn,url};
+   $('rep-img').innerHTML=`<div class="row"><button type="button" class="btn" id="rep-share">分享或儲存圖片</button></div><p class="hint">也可以長按下面的圖片，選「儲存影像」或直接分享。</p><img src="${url}" alt="財富報告圖片">`;
+   msg.textContent='圖片已生成。';},'image/png');
+ }catch(e){msg.textContent='生成失敗，請再試一次。'}
+}
+async function shareImage(){
+ const R=window.__rep;if(!R)return;const msg=$('rep-msg');
+ try{const file=new File([R.blob],R.fn,{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:'財富報告'});msg.textContent='已打開分享。';return}}catch(e){if(e&&e.name==='AbortError')return}
+ try{if(window.claude&&typeof window.claude.use==='function'){const dl=await window.claude.use('downloads');if(dl){await dl.save({filename:R.fn,data:R.blob});msg.textContent='已儲存，可以在「檔案」或相冊找到，再傳到微信或 WhatsApp。';return}}}catch(e){if(e&&e.code==='declined'){msg.textContent='已取消。';return}}
+ try{const a=document.createElement('a');a.href=R.url;a.download=R.fn;document.body.appendChild(a);a.click();a.remove();msg.textContent='已下載。如果沒有反應，請長按圖片儲存。'}catch(e){msg.textContent='請長按圖片儲存。'}
+}
+function enterFriend(){SAVED=clone(S);KEYS.forEach(k=>{if(k!=='settings')S[k]=clone(DEF[k])});S.report.sel=(SAVED.report&&SAVED.report.sel)?SAVED.report.sel.slice():['home'];FRIEND=true;$('friend-bar').hidden=false;$('friend-btn').hidden=true;tab='home';render();window.scrollTo(0,0)}
+function exitFriend(){KEYS.forEach(k=>{S[k]=SAVED[k]!==undefined?SAVED[k]:clone(DEF[k])});SAVED=null;FRIEND=false;$('friend-bar').hidden=true;$('friend-btn').hidden=false;window.__rep=null;render();window.scrollTo(0,0)}
 function goalInputs(){const o=get('goal'),rc=recent(),inv=investSummary();
   const type=o.type||'asset';let target=N(o.target);
   if(type==='passive'){const pm=N(o.pMonth),y=N(o.pYield)/100;target=pm>0&&y>0?pm*12/y:NaN}
@@ -700,6 +770,10 @@ document.addEventListener('click',e=>{
  if(b.id==='ck-save'){const code=$('ck-code').value.trim();const m=$('ck-msg');if(!code){m.textContent='請先填寫客戶代號。';return}if(!Object.keys(ck().answers).length){m.textContent='第一階段還沒有答案。';return}
    const dt=new Date();get('checkRecords').unshift({code,date:dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'),answers:Object.assign({},ck().answers)});persist('checkRecords');render();$('ck-msg').textContent='已保存：'+code;return}
  if(d.cmp!==undefined){const r=get('checkRecords')[+d.cmp];const R={no:0,unsure:1,ok:2};$('ck-cmp').innerHTML=MODS.map(m=>{const a=r.answers[m.id],b2=ck().answers[m.id];let c='',t='沒變化';if(a&&b2&&R[b2]>R[a]){c='ok';t='進步了'}else if(a&&b2&&R[b2]<R[a]){c='bad';t='變差了'}else if(!a||!b2)t='資料不全';return kv(m.name+'：'+(a?LB[a]:'–')+' → '+(b2?LB[b2]:'–'),t,c)}).join('');return}
+ if(b.id==='friend-btn'){enterFriend();return}
+ if(b.id==='friend-exit'){exitFriend();return}
+ if(b.id==='rep-make'){makeImage();return}
+ if(b.id==='rep-share'){shareImage();return}
  if(b.id==='bk-copy'){const txt=JSON.stringify(S);const msg=$('bk-msg');const fall=()=>{$('bk-text').value=txt;$('bk-text').select();msg.textContent='已放進下面的方框並選取，請手動複製。'};
    try{navigator.clipboard.writeText(txt).then(()=>{msg.textContent='已複製，可以貼到 Notion 或備忘錄。'},fall)}catch(x){fall()}return}
  if(b.id==='bk-restore'){const msg=$('bk-msg');try{const o=JSON.parse($('bk-text').value);let n=0;KEYS.forEach(k=>{if(o[k]!==undefined){S[k]=o[k];persist(k);n++}});msg.textContent=n?'已還原。':'內容裡沒有可還原的資料。';if(n)render()}catch(x){msg.textContent='內容格式不對，請貼上完整的備份。'}return}
@@ -712,7 +786,7 @@ function onField(e){
  if(d.ck2){ck().vals[d.ck2]=el.value;persist('check');checkAfter();return}
 }
 document.addEventListener('input',e=>{if(e.target.tagName!=='SELECT')onField(e)});
-document.addEventListener('change',e=>{if(e.target.id==='cur'){get('settings').cur=e.target.value;persist('settings');render();return}if(e.target.tagName==='SELECT')onField(e)});
+document.addEventListener('change',e=>{if(e.target.dataset&&e.target.dataset.repsel){const r=get('report');r.sel=r.sel||[];const id=e.target.dataset.repsel,i=r.sel.indexOf(id);if(e.target.checked&&i<0)r.sel.push(id);if(!e.target.checked&&i>-1)r.sel.splice(i,1);persist('report');const c=$('rep-card');if(c)c.innerHTML=reportHtml();return}if(e.target.id==='cur'){get('settings').cur=e.target.value;persist('settings');render();return}if(e.target.tagName==='SELECT')onField(e)});
 
 render();
 initCloud();
