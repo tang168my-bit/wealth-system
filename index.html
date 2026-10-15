@@ -159,10 +159,11 @@ details.fx[open] summary{border-bottom:1px solid var(--line)}
       </label>
     </div>
   </header>
-  <div class="fbar" id="friend-bar" hidden><span><b>朋友模式</b>：這裡填的數字不會存進你的記錄。算完先到「報告」生成圖片，結束後朋友的數字會清空。</span><button type="button" class="btn small warm" id="friend-exit">結束朋友模式</button></div>
+  <div class="fbar" id="friend-bar" hidden><span><b>朋友模式</b>：這裡填的數字不會存進你的記錄。算完在頁面最下面按「下載這一頁的報告」，結束後朋友的數字會清空。</span><button type="button" class="btn small warm" id="friend-exit">結束朋友模式</button></div>
   <nav class="nav" id="nav" aria-label="系統分區"></nav>
   <main id="main"></main>
 </div>
+<div style="position:absolute;left:-10000px;top:0" aria-hidden="true"><div id="rep-card"></div></div>
 
 <script src="html2canvas.min.js"></script>
 <script>
@@ -186,7 +187,7 @@ function kv(label,val,c,note){return `<div class="kv ${c||''}"><span>${label}</s
 
 /* ================= 資料與儲存 ================= */
 const DEF={
-  settings:{cur:'HK$'},
+  settings:{cur:'HK$',sign:'mani'},
   income:[],expense:[],assets:[],debts:[],invest:[],trades:[],biz:[],compare:[],ins:[],
   budget:{},goal:{type:'asset',rates:'2,4,6,8,10'},levsim:{},cmpYears:'',firms:[],disc:{},quick:{},report:{name:'',sel:['home']},
   check:{answers:{},selected:[],vals:{},medHas:'',leg:[null,null,null,null,null,null]},
@@ -474,6 +475,7 @@ const TABS=[
 {id:'home',name:'總覽',html:()=>`<section class="sheet">${lead('財富總覽','所有數字都從你的記錄自動算出。先在各分區記錄，這裡就會亮起來。')}<div id="sum"></div></section>
  <section class="sheet"><h3>其他資產（投資以外）</h3><p class="muted">現金、房產、保單現金價值等。類別選「現金」的會用來計算應急金。</p>${table('assets')}</section>
  <section class="sheet"><h3>這一頁用到的公式</h3>${fx(['networth','surplus','saverate','emergency','passcover','debtcover','xirr'])}</section>
+ <section class="sheet"><h3>報告署名</h3><p class="muted">下載報告時，底部會用小字標上這個名字。</p><div class="fields"><label class="f" for="settings-sign">署名<input type="text" id="settings-sign" data-o="settings" data-k="sign" value="${esc((S.settings&&S.settings.sign)||'mani')}"></label></div></section>
  <section class="sheet"><h3>資料與備份</h3><p class="muted">為了不再丟失，可以定期按「複製備份」，把內容貼到 Notion 或備忘錄存起來。需要還原時，把備份貼到下面再按「還原」。</p>
  <div class="row"><button type="button" class="btn small" id="bk-copy">複製備份</button><span class="muted" id="bk-msg" aria-live="polite"></span></div>
  <label class="f" for="bk-text">貼上備份內容<textarea id="bk-text"></textarea></label><button type="button" class="btn small ghost" id="bk-restore">用貼上的內容還原</button></section>`,
@@ -612,12 +614,6 @@ const TABS=[
   {const d=debtSummary(),rc=recent();const pay=ok(v('ds_p'))?v('ds_p'):d.pay,inc=ok(v('ds_i'))?v('ds_i'):rc.inc;const r=pay/inc;
    set('q8',kv('每月總還款',money(pay))+kv('每月收入',money(inc))+kv('供款負擔比率',inc>0&&ok(pay)?pct(r,0):'–'))}
  }},
-{id:'report',name:'報告',html:()=>{const r=get('report');return `<section class="sheet">${lead('生成報告','把選好的結果整理成一張圖片，可以傳給朋友。報告只包含你勾選的內容。')}
- <div class="fields"><label class="f" for="rep-name">報告對象（名稱或代號）<input type="text" id="rep-name" data-o="report" data-k="name" value="${esc(r.name)}" placeholder="例如：陳先生"></label></div>
- <div class="repsel">${REP.map(x=>`<label><input type="checkbox" data-repsel="${x.id}"${(r.sel||[]).indexOf(x.id)>-1?' checked':''}>${x.n}</label>`).join('')}</div>
- <button type="button" class="btn" id="rep-make">生成報告圖片</button><p class="muted" id="rep-msg" aria-live="polite"></p>
- <div id="rep-img"></div></section>
- <section class="sheet"><h3>預覽</h3><div class="repwrap"><div id="rep-card"></div></div></section>`},sum:()=>'',after:()=>{const c=$('rep-card');if(c)c.innerHTML=reportHtml()}},
 {id:'lib',name:'公式庫',html:()=>{const cats=[...new Set(Object.values(F).map(f=>f.c))];return `<section class="sheet">${lead('公式庫','從你的 Notion 和以前的對話整理出來，每條都附 Excel 寫法和出處。查不到出處的「實證數據」沒有收錄。')}</section>${cats.map(c=>`<section class="sheet"><h3>${c}</h3><div class="lib">${Object.keys(F).filter(k=>F[k].c===c).map(fcard).join('')}</div></section>`).join('')}`},sum:()=>''},
 {id:'check',name:'客戶體檢',html:()=>checkHtml(),sum:()=>'',after:()=>checkAfter()}
 ];
@@ -642,30 +638,35 @@ const REP=[
  {id:'levall',n:'槓桿總覽',f:()=>TB('levsim').sum2()},
  {id:'quick',n:'小計算器結果',f:()=>{TB('quick').after();return Object.keys(QT).filter(k=>QR[k]&&/<b>[^–<]/.test(QR[k])&&(k!=='q8'||debtSummary().pay>0||ok(N(get('quick').ds_p)))).map(k=>`<div><b>${QT[k]}</b></div>`+QR[k]).join('')||'<p class="hint">小計算器還沒有填數字。</p>'}}];
 const LIT={'--accent-soft':'#e2efed','--accent':'#1d6b66','--gold-soft':'#f6eedb','--gold':'#9a6f18','--line':'#d8e2e0','--muted':'#5d6e75','--ink':'#15262d','--surface':'#ffffff','--bad':'#bb4136'};
-function reportHtml(){
- const r=get('report'),sel=r.sel||[];const d=new Date();const ds=d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日';
- let body=REP.filter(x=>sel.indexOf(x.id)>-1).map(x=>{let h='';try{h=x.f()}catch(e){h='<p class="hint">這部分暫時算不出來。</p>'}return `<section style="display:flex;flex-direction:column;gap:8px"><h3>${x.n}</h3>${h}</section>`}).join('');
- if(!body)body='<p class="hint">請在上面勾選要放進報告的內容。</p>';
+function insRep(){const rows=get('ins').filter(r=>N(r.prem)>0);if(!rows.length)return '<p class="hint">還沒有填保單資料。</p>';const cp=SCHEMA.ins.comp;
+ return `<div class="tbl-wrap"><table class="tbl read"><thead><tr><th>類型</th><th>產品</th><th>每年保費</th><th>繳費年數</th><th>保額</th>${cp.map(c=>`<th>${c.l}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.type)}</td><td>${esc(r.name)}</td><td>${money(N(r.prem))}</td><td>${esc(r.years)}</td><td>${money(N(r.sum))}</td>${cp.map(c=>`<td>${c.fn(r)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`}
+function checkRep(){const c=ck();
+ if(stage==='s1')return `<div class="tiles">${MODS.map(m=>{const a=c.answers[m.id];return kv(m.name,a?LB[a]:'未回答',a==='ok'?'ok':a==='unsure'?'warn':a==='no'?'bad':'',c.selected.indexOf(m.id)>-1?'下次詳細計算':'')}).join('')}</div>`;
+ const out=[];const base=$('ck-base');if(base)out.push('<h3>財務地基</h3>'+base.innerHTML);
+ document.querySelectorAll('#main section.sheet').forEach(sec=>{const h=sec.querySelector('.mhead h3');if(!h)return;const l=sec.querySelector('.light');const res=sec.querySelector('[id^="ck-"]:not(input)');out.push(`<h3>${esc(h.textContent)}${l&&l.textContent?' <span class="tag '+(l.classList.contains('ok')?'ok':l.classList.contains('no')?'bad':'warn')+'">'+esc(l.textContent)+'</span>':''}</h3>`+(res?res.innerHTML:''))});
+ return out.join('')||'<p class="hint">還沒有計算結果。</p>'}
+const PAGES={home:['home'],income:['income'],expense:['expense'],debts:['debts'],invest:['invest','disc'],firms:['firms'],trades:['trades'],biz:['biz'],compare:['compare'],budget:['life','edu'],goal:['goal'],levsim:['lev','ins','levall'],quick:['quick'],check:['check']};
+REP.push({id:'ins',n:'保險槓桿',f:insRep},{id:'check',n:'客戶體檢',f:checkRep});
+function repBar(page){const r=get('report');return `<section class="sheet"><h3>下載這一頁的報告</h3><p class="muted">只包含這一頁的結果，生成一張圖片，可以傳到微信或 WhatsApp。</p><div class="fields"><label class="f" for="rep-name">報告對象（名稱或代號）<input type="text" id="rep-name" data-o="report" data-k="name" value="${esc(r.name)}" placeholder="例如：陳先生"></label></div><button type="button" class="btn" data-repmake="${page}">下載這一頁的報告</button><p class="muted" id="rep-msg" aria-live="polite"></p><div id="rep-img"></div></section>`}
+function reportHtml(page){
+ const r=get('report');const d=new Date();const ds=d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日';const sign=(S.settings&&S.settings.sign)||'mani';
+ let body=(PAGES[page]||[]).map(id=>REP.find(x=>x.id===id)).filter(Boolean).map(x=>{let h='';try{h=x.f()}catch(e){h='<p class="hint">這部分暫時算不出來。</p>'}if(h.indexOf('class="kv')>-1&&!/<b>[^–<]/.test(h))return '';return `<section style="display:flex;flex-direction:column;gap:8px"><h3>${x.n}</h3>${h}</section>`}).join('');
+ if(!body)body='<p class="hint">這一頁還沒有計算結果。</p>';
  body=body.replace(/var\((--[a-z-]+)\)/g,(m,v)=>LIT[v]||m);
- return `<div class="rh"><div><h2 style="font-size:1.4rem">財富報告</h2><p class="muted">${esc(r.name||'')}</p></div><p class="muted">${ds}・幣種 ${esc(cur())}</p></div>${body}<div class="rfoot">計算結果根據填寫的數字和假設得出，只供參考，不構成投資建議。</div>`;
+ return `<div class="rh"><div><h2 style="font-size:1.4rem">財富報告</h2><p class="muted">${esc(r.name||'')}</p></div><p class="muted">${ds}・幣種 ${esc(cur())}</p></div>${body}<div class="rfoot">計算結果根據填寫的數字和假設得出，只供參考，不構成投資建議。<br>製作：${esc(sign)}</div>`;
 }
-async function makeImage(){
- const msg=$('rep-msg');const card=$('rep-card');card.innerHTML=reportHtml();
+async function makeImage(page){
+ const msg=$('rep-msg');const card=$('rep-card');card.innerHTML=reportHtml(page);
  if(typeof window.html2canvas!=='function'){msg.textContent='圖片工具載入不到，請在有網絡時重新打開再試。';return}
  msg.textContent='正在生成圖片……';
- try{const cv=await window.html2canvas(card,{scale:2,backgroundColor:'#ffffff',useCORS:true});
-  cv.toBlob(blob=>{if(!blob){msg.textContent='生成失敗，請再試一次。';return}
-   const r=get('report');const d=new Date();const fn='財富報告-'+(r.name||'未命名').replace(/[\\/:*?"<>|]/g,'')+'-'+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'.png';
-   const url=URL.createObjectURL(blob);window.__rep={blob,fn,url};
-   $('rep-img').innerHTML=`<div class="row"><button type="button" class="btn" id="rep-share">分享或儲存圖片</button></div><p class="hint">也可以長按下面的圖片，選「儲存影像」或直接分享。</p><img src="${url}" alt="財富報告圖片">`;
-   msg.textContent='圖片已生成。';},'image/png');
- }catch(e){msg.textContent='生成失敗，請再試一次。'}
-}
-async function shareImage(){
- const R=window.__rep;if(!R)return;const msg=$('rep-msg');
- try{const file=new File([R.blob],R.fn,{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:'財富報告'});msg.textContent='已打開分享。';return}}catch(e){if(e&&e.name==='AbortError')return}
- try{if(window.claude&&typeof window.claude.use==='function'){const dl=await window.claude.use('downloads');if(dl){await dl.save({filename:R.fn,data:R.blob});msg.textContent='已儲存，可以在「檔案」或相冊找到，再傳到微信或 WhatsApp。';return}}}catch(e){if(e&&e.code==='declined'){msg.textContent='已取消。';return}}
- try{const a=document.createElement('a');a.href=R.url;a.download=R.fn;document.body.appendChild(a);a.click();a.remove();msg.textContent='已下載。如果沒有反應，請長按圖片儲存。'}catch(e){msg.textContent='請長按圖片儲存。'}
+ let blob=null;
+ try{const cv=await window.html2canvas(card,{scale:2,backgroundColor:'#ffffff'});blob=await new Promise(r=>cv.toBlob(r,'image/png'))}catch(e){}
+ if(!blob){msg.textContent='生成失敗，請再試一次。';return}
+ const r=get('report');const d=new Date();const fn='財富報告-'+(r.name||'未命名').replace(/[\\/:*?"<>|]/g,'')+'-'+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'.png';
+ const url=URL.createObjectURL(blob);window.__rep={blob,fn,url};
+ $('rep-img').innerHTML=`<div class="row"><button type="button" class="btn" id="rep-share">分享或儲存圖片</button></div><p class="hint">也可以長按下面的圖片，選「儲存影像」或直接分享。</p><img src="${url}" alt="財富報告圖片">`;
+ msg.textContent='圖片已生成。';
+ if(window.claude&&typeof window.claude.use==='function'){try{const dl=await window.claude.use('downloads');if(dl){await dl.save({filename:fn,data:blob});msg.textContent='已儲存，可以在「檔案」或相冊找到，再傳到微信或 WhatsApp。'}}catch(e){if(e&&e.code==='declined')msg.textContent='已取消儲存。需要時可以按下面的按鈕再試。'}}
 }
 function enterFriend(){SAVED=clone(S);KEYS.forEach(k=>{if(k!=='settings')S[k]=clone(DEF[k])});S.report.sel=(SAVED.report&&SAVED.report.sel)?SAVED.report.sel.slice():['home'];FRIEND=true;$('friend-bar').hidden=false;$('friend-btn').hidden=true;tab='home';render();window.scrollTo(0,0)}
 function exitFriend(){KEYS.forEach(k=>{S[k]=SAVED[k]!==undefined?SAVED[k]:clone(DEF[k])});SAVED=null;FRIEND=false;$('friend-bar').hidden=true;$('friend-btn').hidden=false;window.__rep=null;render();window.scrollTo(0,0)}
@@ -753,7 +754,7 @@ let tab='home';try{tab=localStorage.getItem('wealthsys_tab')||'home'}catch(e){}
 if(!TABS.some(t=>t.id===tab))tab='home';
 function nav(){$('nav').innerHTML=TABS.map(t=>(t.id==='lib'?'<span class="sep"></span>':'')+`<button type="button" data-tab="${t.id}" aria-current="${t.id===tab}">${t.name}</button>`).join('')}
 function sums(){const t=TABS.find(x=>x.id===tab);const s=$('sum');if(s&&t.sum)s.innerHTML=t.sum();const s2=$('sum2');if(s2&&t.sum2)s2.innerHTML=t.sum2();if(t.after)t.after()}
-function render(){nav();$('cur').value=cur();const t=TABS.find(x=>x.id===tab);$('main').innerHTML=DL+t.html();sums()}
+function render(){nav();$('cur').value=cur();const t=TABS.find(x=>x.id===tab);$('main').innerHTML=DL+t.html()+(PAGES[tab]&&!(tab==='check'&&stage==='s3')?repBar(tab):'');sums()}
 function update(){recalcCells();sums()}
 
 document.addEventListener('click',e=>{
@@ -772,7 +773,7 @@ document.addEventListener('click',e=>{
  if(d.cmp!==undefined){const r=get('checkRecords')[+d.cmp];const R={no:0,unsure:1,ok:2};$('ck-cmp').innerHTML=MODS.map(m=>{const a=r.answers[m.id],b2=ck().answers[m.id];let c='',t='沒變化';if(a&&b2&&R[b2]>R[a]){c='ok';t='進步了'}else if(a&&b2&&R[b2]<R[a]){c='bad';t='變差了'}else if(!a||!b2)t='資料不全';return kv(m.name+'：'+(a?LB[a]:'–')+' → '+(b2?LB[b2]:'–'),t,c)}).join('');return}
  if(b.id==='friend-btn'){enterFriend();return}
  if(b.id==='friend-exit'){exitFriend();return}
- if(b.id==='rep-make'){makeImage();return}
+ if(d.repmake){makeImage(d.repmake);return}
  if(b.id==='rep-share'){shareImage();return}
  if(b.id==='bk-copy'){const txt=JSON.stringify(S);const msg=$('bk-msg');const fall=()=>{$('bk-text').value=txt;$('bk-text').select();msg.textContent='已放進下面的方框並選取，請手動複製。'};
    try{navigator.clipboard.writeText(txt).then(()=>{msg.textContent='已複製，可以貼到 Notion 或備忘錄。'},fall)}catch(x){fall()}return}
