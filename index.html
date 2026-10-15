@@ -171,7 +171,7 @@ function kv(label,val,c,note){return `<div class="kv ${c||''}"><span>${label}</s
 const DEF={
   settings:{cur:'HK$'},
   income:[],expense:[],assets:[],debts:[],invest:[],trades:[],biz:[],compare:[],ins:[],
-  budget:{},goal:{type:'asset',rates:'2,4,6,8,10'},levsim:{},cmpYears:'',firms:[],disc:{},
+  budget:{},goal:{type:'asset',rates:'2,4,6,8,10'},levsim:{},cmpYears:'',firms:[],disc:{},quick:{},
   check:{answers:{},selected:[],vals:{},medHas:'',leg:[null,null,null,null,null,null]},
   checkRecords:[]
 };
@@ -234,6 +234,15 @@ const F={
  nper:{c:'通脹與時間價值',n:'要多久 NPER',f:'n = ln[(目標 × r + PMT) ÷ (現值 × r + PMT)] ÷ ln(1 + r)',p:'照現在的速度，要多少期才到達目標。',x:'=NPER(r,-每期投入,-現值,目標)',s:'G'},
  rate:{c:'通脹與時間價值',n:'需要多少回報 RATE',f:'找出 r，使 FV(r, n, PMT, 現值) = 目標',p:'時間和投入不變時，需要多高的回報率。沒有直接公式，要用試算求出。',x:'=RATE(n,-每期投入,-現值,目標)',s:'G'},
  futexp:{c:'通脹與時間價值',n:'未來第一年生活費',f:'未來第一年生活費 = 今天年支出 × (1 + 通脹率)^年數',p:'把今天的生活費，換算成退休那年的價格。',x:'=年支出*(1+g)^d',s:'B C'},
+ simple:{c:'通脹與時間價值',n:'單利年回報',f:'單利年回報 = (到期金額 ÷ 本金 − 1) ÷ 年數',p:'同一筆投資，單利講出來的數字通常比複利大，時間越長差距越大。比較時一律換成複利。',x:'=(到期/本金-1)/年數',s:'H'},
+ cagr2:{c:'通脹與時間價值',n:'複利年回報（一次過投入）',f:'複利年回報 = (到期金額 ÷ 本金)^(1 ÷ 年數) − 1',p:'只適合中途沒有錢進出的投資；有租金、股息或持有開支的，要用 XIRR。',x:'=RRI(年數,本金,到期)',s:'H'},
+ moic:{c:'通脹與時間價值',n:'總回報倍數',f:'總回報倍數 = 總共拿回的錢 ÷ 自己投入的錢',p:'一元最後變成幾元。不看時間，要配合年化回報一起看。',x:'=SUM(拿回)/SUM(投入)',s:'H'},
+ rule72:{c:'通脹與時間價值',n:'72 法則',f:'翻倍需要的年數 ≈ 72 ÷ 年回報率（%）',p:'心算複利的快捷方法，回報率在幾個百分點到十幾個百分點之間最準。',x:'=72/年回報率(%)　精確版 =NPER(r,0,-1,2)',s:'H'},
+ rentyield:{c:'機會比較',n:'租金回報率',f:'毛租金回報率 = 年租金 ÷ 樓價\n淨租金回報率 = (年租金 − 持有成本) ÷ 總投入',p:'持有成本包括管理費、差餉地租、維修和空置；總投入包括買入成本。',x:'=(年租金-持有成本)/(樓價+買入成本)',s:'H'},
+ fxret:{c:'跨境與費用',n:'匯率調整後回報',f:'本幣回報 = (1 + 外幣資產回報) × (1 + 匯率變動) − 1',p:'用港幣或人民幣計算美元資產的回報時，要連匯率升跌一起計。',x:'=(1+資產回報)*(1+匯率變動)-1',s:'H'},
+ feedrag:{c:'跨境與費用',n:'費用侵蝕',f:'長期終值 ≈ 本金 × (1 + 回報 − 每年費用率)^年數',p:'每年 1% 至 2% 的費用，時間一長會吃掉很大一部分回報。',x:'=本金*(1+回報-費用率)^年數',s:'H'},
+ ear:{c:'債務',n:'實際年利率（含平息換算）',f:'實際年利率 = (1 + 名義年利率 ÷ 每年計息次數)^每年計息次數 − 1\n平息貸款：先求每月實際利率，再換成年利率',p:'香港很多私人貸款報「月平息」，實際利率比表面高很多。借錢前一定要換算。',x:'=EFFECT(名義利率,次數)　平息：=RATE(期數,-每月還款,貸款額)*12',s:'H'},
+ dsr:{c:'債務',n:'供款負擔比率',f:'供款負擔比率 = 每月總還款 ÷ 每月收入',p:'銀行批按揭時會看這個比率，自己借錢前也要先算。',x:'=月還款/月收入',s:'H'},
  annpv:{c:'生活、養老與教育',n:'普通年金現值',f:'PV = 每年領取 × [1 − (1 + r)^(−n)] ÷ r',p:'每年領固定金額、領 n 年，一開始要有多少本金。',x:'=PV(r,n,-每年領取)',s:'B C'},
  gapv:{c:'生活、養老與教育',n:'成長年金現值（含通脹）',f:'PV = 第一年領取 × [1 − ((1 + g) ÷ (1 + r))^n] ÷ (r − g)',p:'每年領取額跟著通脹上升時，一開始要有多少本金。',x:'=PMT1*(1-((1+g)/(1+r))^n)/(r-g)　（Excel 沒有直接函數）',s:'A C'},
  defer:{c:'生活、養老與教育',n:'延後領取折回今天',f:'今天所需 = 退休當下所需 ÷ (1 + r)^距離退休年數',p:'退休時要的一大筆錢，換算成今天要準備多少。',x:'=退休時所需/(1+r)^d',s:'C'},
@@ -557,6 +566,32 @@ const TABS=[
   if(t.length){const avg=t.reduce((s,r)=>s+N(r.notional)/N(r.cap),0)/t.length;const risky=t.filter(r=>r.over==='是'||r.kind==='賣出期權').length;rows.push(['槓桿交易（平均）',num(avg,1)+' 倍',risky?`<span class="tag bad">${risky} 筆虧損可超過本金</span>`:'虧損有上限','視乎合約到期日'])}
   if(!rows.length)return '<p class="hint">填了上面的投資槓桿、保險，或在「槓桿交易」記錄後，這裡會並排比較。</p>';
   return `<div class="tbl-wrap"><table class="tbl read"><thead><tr><th>槓桿來源</th><th>放大倍數</th><th>最差情況</th><th>錢被鎖住多久</th></tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`}},
+{id:'quick',name:'小計算器',html:()=>{const card=(t,d,fields,id,keys)=>`<section class="sheet"><div class="lead"><h3>${t}</h3><p class="muted">${d}</p></div>${form('quick',fields)}<div id="${id}"></div>${fx(keys)}</section>`;
+ return `<section class="sheet">${lead('小計算器','臨時要算一個數，就在這裡算。填的數字會保留，方便下次再看。')}</section>`+
+ card('單利與複利換算','一次過投入、到期一次過拿回的投資。',[{k:'s_p',l:'本金'},{k:'s_f',l:'到期拿回'},{k:'s_n',l:'年數'}],'q1',['simple','cagr2','moic'])+
+ card('72 法則：多久翻倍','心算複利的快捷方法，下面同時顯示精確答案。',[{k:'r72',l:'年回報 %'}],'q2',['rule72'])+
+ card('租金回報率','看樓時最常用。',[{k:'ry_p',l:'樓價'},{k:'ry_c',l:'買入成本（印花稅、佣金、裝修）'},{k:'ry_r',l:'每月租金'},{k:'ry_h',l:'每年持有成本（管理費、差餉、維修、空置）'}],'q3',['rentyield'])+
+ card('匯率調整後回報','外幣資產換回你的本幣，真實回報是多少。',[{k:'fx_a',l:'資產本身的回報 %'},{k:'fx_x',l:'外幣對本幣的升跌 %（跌就填負數）'}],'q4',['fxret'])+
+ card('費用侵蝕','每年的管理費，長期會吃掉多少。',[{k:'fe_p',l:'本金'},{k:'fe_r',l:'年回報 %（未扣費用）'},{k:'fe_f',l:'每年費用 %'},{k:'fe_n',l:'年數'}],'q5',['feedrag'])+
+ card('實際年利率','名義利率按月或按日計息，實際一年付多少。',[{k:'ea_r',l:'名義年利率 %'},{k:'ea_m',l:'每年計息次數（按月填 12）'}],'q6',['ear'])+
+ card('平息貸款換算','私人貸款常報「月平息」，換算成真實的年利率。',[{k:'fl_l',l:'貸款金額'},{k:'fl_r',l:'月平息 %'},{k:'fl_n',l:'還款期（月）'}],'q7',['ear','payoff'])+
+ card('供款負擔比率','借錢前先算。留空會用你的記錄。',[{k:'ds_p',l:'每月總還款',ph:'留空＝借貸記錄合計'},{k:'ds_i',l:'每月收入',ph:'留空＝最近平均收入'}],'q8',['dsr'])},
+ sum:()=>'',after:()=>{const q=get('quick'),v=k=>N(q[k]),set=(id,h)=>{const e=$(id);if(e)e.innerHTML=`<div class="tiles">${h}</div>`};
+  {const P=v('s_p'),F=v('s_f'),n=v('s_n');const ok3=P>0&&ok(F)&&n>0;const si=ok3?(F/P-1)/n:NaN,co=ok3&&F>0?Math.pow(F/P,1/n)-1:NaN;
+   set('q1',kv('單利年回報',pct(si,2))+kv('複利年回報',pct(co,2))+kv('兩者相差',ok(si)&&ok(co)?pct(si-co,2):'–','','單利聽起來高了這麼多')+kv('總回報倍數',ok3?num(F/P,2)+' 倍':'–'))}
+  {const r=v('r72');set('q2',kv('72 法則估算',r>0?num(72/r,1)+' 年':'–')+kv('精確答案',r>0?num(Math.log(2)/Math.log(1+r/100),1)+' 年':'–'))}
+  {const P=v('ry_p'),C=v('ry_c')||0,R=v('ry_r'),H=v('ry_h')||0;set('q3',kv('毛租金回報率',P>0&&ok(R)?pct(R*12/P,2):'–')+kv('淨租金回報率',P>0&&ok(R)?pct((R*12-H)/(P+C),2):'–','','已扣持有成本，並計入買入成本')+kv('每年淨租金',ok(R)?money(R*12-H):'–'))}
+  {const a=v('fx_a')/100,x=v('fx_x')/100;set('q4',kv('本幣計算的真實回報',ok(a)&&ok(x)?pct((1+a)*(1+x)-1,2):'–'))}
+  {const P=v('fe_p'),r=v('fe_r')/100,f=v('fe_f')/100,n=v('fe_n');const ok4=P>0&&ok(r)&&ok(f)&&n>0;const a=ok4?P*Math.pow(1+r,n):NaN,b=ok4?P*Math.pow(1+r-f,n):NaN;
+   set('q5',kv('沒有費用的終值',money(a))+kv('扣費用後的終值',money(b))+kv('被費用吃掉',money(a-b),ok4?'bad':'',ok4&&a>P?'佔增值的 '+pct((a-b)/(a-P),0):''))}
+  {const r=v('ea_r')/100,m=v('ea_m');set('q6',kv('實際年利率',ok(r)&&m>0?pct(Math.pow(1+r/m,m)-1,2):'–'))}
+  {const L=v('fl_l'),fr=v('fl_r')/100,n=v('fl_n');let out=kv('每月還款','–')+kv('真實年利率','–');
+   if(L>0&&fr>=0&&n>0){const pay=L/n+L*fr;const f=i=>i===0?L/n:L*i/(1-Math.pow(1+i,-n));let lo=0,hi=1;for(let k=0;k<200;k++){const m=(lo+hi)/2;if(f(m)<pay)lo=m;else hi=m}const im=(lo+hi)/2;
+    out=kv('每月還款',money(pay))+kv('表面年利率（月平息 × 12）',pct(fr*12,2))+kv('真實年利率',pct(im*12,2),'bad','跟銀行報價的年利率同一計法')+kv('總利息',money(pay*n-L))}
+   set('q7',out)}
+  {const d=debtSummary(),rc=recent();const pay=ok(v('ds_p'))?v('ds_p'):d.pay,inc=ok(v('ds_i'))?v('ds_i'):rc.inc;const r=pay/inc;
+   set('q8',kv('每月總還款',money(pay))+kv('每月收入',money(inc))+kv('供款負擔比率',inc>0&&ok(pay)?pct(r,0):'–'))}
+ }},
 {id:'lib',name:'公式庫',html:()=>{const cats=[...new Set(Object.values(F).map(f=>f.c))];return `<section class="sheet">${lead('公式庫','從你的 Notion 和以前的對話整理出來，每條都附 Excel 寫法和出處。查不到出處的「實證數據」沒有收錄。')}</section>${cats.map(c=>`<section class="sheet"><h3>${c}</h3><div class="lib">${Object.keys(F).filter(k=>F[k].c===c).map(fcard).join('')}</div></section>`).join('')}`},sum:()=>''},
 {id:'check',name:'客戶體檢',html:()=>checkHtml(),sum:()=>'',after:()=>checkAfter()}
 ];
